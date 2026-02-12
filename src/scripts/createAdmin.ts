@@ -42,12 +42,12 @@ async function run() {
         if (existingAdmin) {
             // User already in admin_users table
         } else {
-            // Try to insert without the id (let database auto-generate if it has a default)
-            // If that fails, we'll use raw SQL
             const { error: adminError } = await supabaseAdmin
                 .from("admin_users")
                 .insert({
                     user_id: newUser.user.id,
+                    role: 'admin',        // ADD THIS
+                    is_active: true       // ADD THIS
                 })
                 .select();
 
@@ -57,7 +57,11 @@ async function run() {
                 // Try using upsert with just the user_id
                 const { error: upsertError } = await supabaseAdmin
                     .from("admin_users")
-                    .upsert({ user_id: newUser.user.id })
+                    .upsert({
+                        user_id: newUser.user.id,
+                        role: 'admin',        // ADD THIS
+                        is_active: true       // ADD THIS
+                    })
                     .select();
 
                 if (upsertError) {
@@ -97,6 +101,8 @@ async function run() {
             .from("admin_users")
             .insert({
                 user_id: user.id,
+                role: 'admin',        // ADD THIS
+                is_active: true       // ADD THIS
             })
             .select();
 

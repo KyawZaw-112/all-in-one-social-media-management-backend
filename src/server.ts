@@ -12,6 +12,8 @@ import posts from "./routes/posts.js";
 import payments from "./routes/payments.js";
 import platforms from "./routes/platforms.js";
 import adminPayments from "./routes/adminPayments.js";
+import adminRoutes from "./routes/admin.js";
+import adminUsersRoutes from "./routes/admin.users.routes.js";
 
 const app = express();
 
@@ -23,17 +25,14 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", message: "Backend is running" });
 });
 
-app.use("/subscriptions", subscriptions);
+app.use("/api/subscriptions", subscriptions);
 app.use("/posts", posts);
 app.use("/payments", payments);
 app.use("/platforms", platforms);
-app.use("/admin/payments", adminPayments);
+app.use("/api/admin/payments", adminPayments);
+app.use("/admin", adminRoutes);
+app.use("/api/admin/users", adminUsersRoutes);
 
-function oauthRoutes() {
-
-}
-
-app.use("/oauth", oauthRoutes);
 
 
 app.listen(4000, () => {

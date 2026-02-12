@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { getFacebookAuthUrl } from "../services/facebookOAuth.js";
+import { getFacebookAuthUrl } from "../services/facebook.services.js";
 
 const router = Router();
 

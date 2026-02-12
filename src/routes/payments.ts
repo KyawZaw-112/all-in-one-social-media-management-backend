@@ -37,18 +37,15 @@ router.post("/stripe/checkout", requireAuth, async (req: any, res) => {
 /**
  * 🇲🇲 Manual payment request
  */
-router.post("/manual", requireAuth, async (req: any, res) => {
-    const { reference } = req.body;
+router.post("/manual", async (req, res) => {
+    try {
+        console.log("Manual payment route hit")
 
-    await supabaseAdmin.from("subscriptions").insert({
-        user_id: req.user.id,
-        country: "MM",
-        status: "pending",
-        payment_provider: "manual",
-        reference
-    });
+        res.json({ success: true })
+    } catch (err) {
+        res.status(500).json({ error: "Server error" })
+    }
+})
 
-    res.json({ message: "Payment submitted. Await approval." });
-});
 
 export default router;

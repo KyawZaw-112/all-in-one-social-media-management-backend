@@ -1,28 +1,34 @@
-// src/routes/subscriptions.ts
 import { Router } from "express";
-import { requireAuth } from "../middleware/requireAuth.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 const router = Router();
 
 router.get("/me", requireAuth, async (req: any, res) => {
-    const { data } = await supabaseAdmin
+    const { data: subscription } = await supabaseAdmin
         .from("subscriptions")
-        .select("status, expires_at,plan")
+        .select("*")
         .eq("user_id", req.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
         .single();
 
-    if (!data) {
-        return res.json({ status: "none" });
+    if (!subscription) return res.json(null);
+
+    // Auto expire
+    if (
+        subscription.status === "active" &&
+        subscription.expires_at &&
+        new Date(subscription.expires_at) < new Date()
+    ) {
+        await supabaseAdmin
+            .from("subscriptions")
+            .update({ status: "expired" })
+            .eq("id", subscription.id);
+
+        subscription.status = "expired";
     }
 
-    if (new Date(data.expires_at) < new Date()) {
-        return res.json({ status: "expired" });
-    }
-
-    res.json({ status: data.status,plan:data.plan });
+    res.json(subscription);
 });
+
 
 export default router;

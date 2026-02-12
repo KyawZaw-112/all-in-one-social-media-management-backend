@@ -7,25 +7,41 @@ const router = express.Router();
 router.get("/pending", requireAdmin, async (req, res) => {
     const { data, error } = await supabaseAdmin
         .from("payments")
-        .select(`
-      id,
-      user_id,
-      plan,
-      country,
-      payment_provider,
-      reference,
-      created_at,
-      profiles(email)
-    `)
+        .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
     res.json(data);
 });
 
-router.post("/approve", requireAdmin, async (req, res) => {
+router.post("/reject", requireAdmin, async (req, res) => {
     const { paymentId } = req.body;
+
+    if (!paymentId) {
+        return res.status(400).json({ error: "paymentId required" });
+    }
+
+    const { error } = await supabaseAdmin
+        .from("payments")
+        .update({
+            status: "rejected",
+            reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", paymentId);
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ success: true });
+});
+
+router.post("/approve/:id", requireAdmin, async (req, res) => {
+    const paymentId = req.params.id;
 
     const { data: payment } = await supabaseAdmin
         .from("payments")
@@ -33,24 +49,47 @@ router.post("/approve", requireAdmin, async (req, res) => {
         .eq("id", paymentId)
         .single();
 
-    const expires =
-        payment.plan === "monthly"
-            ? new Date(Date.now() + 30 * 86400000)
-            : new Date(Date.now() + 365 * 86400000);
+    if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+    }
 
+    const startDate = new Date();
+    const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // 1️⃣ Update payment
     await supabaseAdmin
         .from("payments")
-        .update({ status: "approved" })
+        .update({
+            status: "approved",
+            reviewed_at: new Date().toISOString(),
+        })
         .eq("id", paymentId);
 
-    await supabaseAdmin.from("subscriptions").upsert({
-        user_id: payment.user_id,
-        plan: payment.plan,
-        status: "active",
-        expires_at: expires.toISOString(),
-    });
+    // 2️⃣ Activate subscription  ← PASTE HERE
+    const { error: subError } = await supabaseAdmin
+        .from("subscriptions")
+        .upsert(
+            {
+                user_id: payment.user_id,
+                plan: payment.plan || "pro",
+                status: "active",
+                country: payment.country || "MM",
+                payment_provider: payment.payment_method || "manual",
+                reference: payment.transaction_id || payment.id,
+                start_date: startDate.toISOString(),
+                expires_at: endDate.toISOString(),
+                created_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+        );
+
+    if (subError) {
+        console.error("Subscription error:", subError);
+        return res.status(500).json({ error: subError.message });
+    }
 
     res.json({ success: true });
 });
+
 
 export default router;
