@@ -61,7 +61,7 @@ router.post("/stripe/checkout", requireAuth, async (req: any, res) => {
  */
 router.post("/manual", requireAuth, async (req, res) => {
     try {
-        const { reference, plan, amount, proof_url } = req.body;
+        const { reference, plan, amount, proof_url, payment_provider } = req.body;
         const userId = req.user.id;
 
         const { error } = await supabaseAdmin
@@ -73,7 +73,7 @@ router.post("/manual", requireAuth, async (req, res) => {
                 transaction_id:reference,
                 proof_url,
                 status: "pending",
-                payment_provider: "manual",
+                payment_provider: payment_provider,
                 created_at: new Date().toISOString(),
             });
 
