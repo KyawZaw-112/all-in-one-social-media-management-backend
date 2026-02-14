@@ -1,9 +1,7 @@
 // src/server.ts
-import dotenv from "dotenv";
-dotenv.config({ path: ".env" });
-console.log("🔥 RAW ENV TEST 🔥");
-console.log("SUPABASE_URL =", process.env.SUPABASE_URL);
-console.log("CWD =", process.cwd());
+// IMPORTANT: Load env FIRST before any other imports
+import "./env.js";
+
 import express from "express";
 import cors from "cors";
 
@@ -25,16 +23,18 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", message: "Backend is running" });
 });
 
-app.use("/api/subscriptions", subscriptions);
+app.use("/subscriptions", subscriptions);
 app.use("/posts", posts);
 app.use("/payments", payments);
 app.use("/platforms", platforms);
-app.use("/api/admin/payments", adminPayments);
 app.use("/admin", adminRoutes);
-app.use("/api/admin/users", adminUsersRoutes);
-
+app.use("/admin/users", adminUsersRoutes);
+app.use("/admin/payments", adminPayments);
+app.get("/", (req, res) => {
+    res.send("Welcome to the API");
+})
 
 
 app.listen(4000, () => {
-    // API running successfully
+    console.log("🚀 Server is running on http://localhost:4000");
 });

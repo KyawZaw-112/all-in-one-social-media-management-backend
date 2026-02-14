@@ -1,24 +1,44 @@
+
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 
-export const getMetrics = async (_req: Request, res: Response) => {
+export const getDashboardMetrics = async (
+    req: Request,
+    res: Response
+) => {
     try {
-        const { count: totalUsers } = await supabaseAdmin
-            .from("users")
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const { count: users } = await supabaseAdmin
+            .from("profiles")
             .select("*", { count: "exact", head: true });
 
-        const { count: subscribedUsers } = await supabaseAdmin
-            .from("subscriptions")
-            .select("*", { count: "exact", head: true })
-            .eq("status", "active");
+        const { data: payments } = await supabaseAdmin
+            .from("payments")
+            .select("status, amount, created_at");
+
+        const monthlyRevenue = payments
+            ?.filter(
+                (p) =>
+                    p.status === "approved" &&
+                    new Date(p.created_at) >= firstDay
+            )
+            .reduce((sum, p) => sum + Number(p.amount), 0);
+
+        const pending =
+            payments?.filter((p) => p.status === "pending").length || 0;
+
+        const approved =
+            payments?.filter((p) => p.status === "approved").length || 0;
 
         res.json({
-            totalUsers: totalUsers || 0,
-            activeUsers: totalUsers || 0,
-            subscribedUsers: subscribedUsers || 0,
-            churnedUsers: 0,
+            users,
+            pending,
+            approved,
+            monthlyRevenue: monthlyRevenue || 0,
         });
-    } catch (error) {
-        res.status(500).json({ error: "Failed to load metrics" });
+    } catch (err) {
+        res.status(500).json({ error: "Admin metrics error" });
     }
 };

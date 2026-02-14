@@ -1,38 +1,37 @@
-import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response, NextFunction } from "express";
+import { supabaseAdmin } from "../supabaseAdmin.js";
 
-export async function requireAdmin(
+export const requireAdmin = async (
     req: Request,
     res: Response,
     next: NextFunction
-) {
-    try {
-        const token = req.headers.authorization?.replace("Bearer ", "");
+) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
 
-        if (!token) {
-            return res.status(401).json({ error: "Unauthorized - No token" });
-        }
-
-        const { data, error } = await supabaseAdmin.auth.getUser(token);
-
-        if (error || !data?.user) {
-            return res.status(401).json({ error: "Invalid token" });
-        }
-
-        const { data: admin } = await supabaseAdmin
-            .from("admin_users")
-            .select("id")
-            .eq("user_id", data.user.id)
-            .single();
-
-        if (!admin) {
-            return res.status(403).json({ error: "Admin only" });
-        }
-
-        (req as any).user = data.user;
-
-        next();
-    } catch (err) {
-        return res.status(500).json({ error: "Server error" });
+    if (!token) {
+        return res.status(401).json({ error: "Unauthorized" });
     }
-}
+
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+
+    if (error || !data.user) {
+        return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+
+    if (profile?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    req.admin = {
+        id: data.user.id,
+        email: data.user.email ?? undefined,
+    };
+
+    next();
+};

@@ -5,6 +5,28 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 
 const router = Router();
 
+
+router.get("/my-history", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    const { data } = await supabaseAdmin.auth.getUser(token);
+    if (!data?.user) return res.status(401).json({ error: "Invalid token" });
+
+    const { data: payments, error } = await supabaseAdmin
+        .from("payments")
+        .select("*")
+        .eq("user_id", data.user.id)
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.json(payments);
+});
+
+
 /**
  * 🇹🇭 Stripe checkout
  */
@@ -37,15 +59,29 @@ router.post("/stripe/checkout", requireAuth, async (req: any, res) => {
 /**
  * 🇲🇲 Manual payment request
  */
-router.post("/manual", async (req, res) => {
+router.post("/manual", requireAuth, async (req, res) => {
     try {
-        console.log("Manual payment route hit")
+        const { reference, plan, amount, proof_url } = req.body;
+        const userId = req.user.id;
 
-        res.json({ success: true })
-    } catch (err) {
-        res.status(500).json({ error: "Server error" })
+        const { error } = await supabaseAdmin
+            .from("payments")
+            .insert({
+                user_id: userId,
+                plan,
+                amount,
+                transaction_id:reference,
+                proof_url,
+                status: "pending",
+                payment_provider: "manual",
+                created_at: new Date().toISOString(),
+            });
+
+        if (error) return res.status(500).json({ error: error.message });
+
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
     }
-})
-
-
+});
 export default router;

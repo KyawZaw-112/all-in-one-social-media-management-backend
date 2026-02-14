@@ -1,12 +1,24 @@
-import { supabaseAdmin } from "../supabaseAdmin.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
 
 export async function requireAuth(req: any, res: any, next: any) {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (!token) return res.sendStatus(401);
+    try {
+        const authHeader = req.headers.authorization;
 
-    const { data } = await supabaseAdmin.auth.getUser(token);
-    if (!data.user) return res.sendStatus(401);
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res.status(401).json({ error: "No token provided" });
+        }
 
-    req.user = data.user;
-    next();
+        const token = authHeader.split(" ")[1];
+
+        const { data, error } = await supabaseAdmin.auth.getUser(token);
+
+        if (error || !data.user) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+
+        req.user = data.user;
+        next();
+    } catch {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
 }

@@ -6,8 +6,8 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
         .from("subscriptions")
         .select("*")
         .eq("user_id", req.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
+        .eq("status", "active")
+        .gt("expires_at", new Date().toISOString())
         .single();
 
     if (!data) {

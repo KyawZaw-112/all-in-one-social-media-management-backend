@@ -1,18 +1,9 @@
-import { Router } from "express";
-import { getMetrics } from "../controllers/admin.controller.js";
+import express from "express";
 import { requireAdmin } from "../middleware/requireAdmin.js";
+import { getDashboardMetrics } from "../controllers/admin.controller.js";
 
-const router = Router();
+const router = express.Router();
 
-// router.get("/metrics", async (req, res) => {
-//     res.json({
-//         totalUsers: 100,
-//         activeUsers: 80,
-//         subscribedUsers: 50,
-//         churnedUsers: 10,
-//     });
-// });
-
-router.get("/metrics",  requireAdmin, getMetrics);
+router.get("/metrics", requireAdmin, getDashboardMetrics);
 
 export default router;

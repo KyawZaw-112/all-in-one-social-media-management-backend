@@ -1,34 +1,33 @@
-import { Router } from "express";
-import { supabaseAdmin } from "../supabaseAdmin.js";
-import { requireAuth } from "../middleware/requireAuth.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
+import {Router} from "express";
 
 const router = Router();
+router.get("/me", async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-router.get("/me", requireAuth, async (req: any, res) => {
+    const { data } = await supabaseAdmin.auth.getUser(token);
+    if (!data?.user) return res.status(401).json({ error: "Invalid token" });
+
     const { data: subscription } = await supabaseAdmin
         .from("subscriptions")
         .select("*")
-        .eq("user_id", req.user.id)
+        .eq("user_id", data.user.id)
         .single();
 
-    if (!subscription) return res.json(null);
+    if (!subscription) {
+        return res.json({ status: "none" });
+    }
 
-    // Auto expire
-    if (
-        subscription.status === "active" &&
+    const isExpired =
         subscription.expires_at &&
-        new Date(subscription.expires_at) < new Date()
-    ) {
-        await supabaseAdmin
-            .from("subscriptions")
-            .update({ status: "expired" })
-            .eq("id", subscription.id);
+        new Date(subscription.expires_at) < new Date();
 
-        subscription.status = "expired";
+    if (isExpired) {
+        return res.json({ status: "expired" });
     }
 
     res.json(subscription);
 });
-
 
 export default router;
