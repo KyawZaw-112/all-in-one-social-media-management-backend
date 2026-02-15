@@ -1,57 +1,69 @@
-import { Router } from "express";
-import {
-    exchangeCodeForToken,
-    getUserPages,
-} from "../services/facebook.services.js";
-import { supabaseAdmin } from "../supabaseAdmin.js";
+import express from "express";
+import axios, {AxiosError} from "axios";
 import { env } from "../config/env.js";
 
-const router = Router();
+const router = express.Router();
 
-router.get("/facebook/callback", async (req, res) => {
-    try {
-        const { code, state } = req.query;
+/**
+ * STEP 1: Redirect user to Facebook OAuth
+ * GET /api/oauth/facebook
+ */
+router.get("/facebook", (req, res) => {
+    const params = new URLSearchParams({
+        client_id: env.FACEBOOK_APP_ID,
+        redirect_uri: env.FACEBOOK_REDIRECT_URI,
+        response_type: "code",
+        scope: "email",
+    });
 
-        if (!code || typeof code !== "string") {
-            return res.redirect(
-                `${env.FRONTEND_URL}/dashboard/platforms?error=true`
-            );
-        }
+    const facebookUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
 
-        const userId = state as string;
-
-        const tokenData = await exchangeCodeForToken(code);
-        const userAccessToken = tokenData.access_token;
-
-        const pages = await getUserPages(userAccessToken);
-
-        for (const page of pages) {
-            await supabaseAdmin
-                .from("platform_connections")
-                .upsert(
-                    {
-                        user_id: userId,
-                        platform: "facebook",
-                        page_id: page.id,
-                        page_name: page.name,
-                        page_access_token: page.access_token,
-                        connected: true,
-                    },
-                    { onConflict: "user_id,page_id" }
-                );
-        }
-
-        return res.redirect(
-            `${env.FRONTEND_URL}/dashboard/platforms?success=true`
-        );
-
-    } catch (error: any) {
-        console.error(error.response?.data || error.message);
-
-        return res.redirect(
-            `${env.FRONTEND_URL}/dashboard/platforms?error=true`
-        );
-    }
+    return res.redirect(facebookUrl);
 });
+
+/**
+ * STEP 2: Facebook Callback
+ * GET /api/oauth/facebook/callback
+ */
+router.get("/facebook/callback", async (req, res) => {
+    const { code } = req.query;
+
+    if (!code) {
+        return res.status(400).json({ error: "No code received" });
+    }
+
+    try {
+        // Exchange code for access token
+        const tokenResponse = await axios.get(
+            "https://graph.facebook.com/v19.0/oauth/access_token",
+            {
+                params: {
+                    client_id: env.FACEBOOK_APP_ID,
+                    client_secret: env.FACEBOOK_APP_SECRET,
+                    redirect_uri: env.FACEBOOK_REDIRECT_URI,
+                    code,
+                },
+            }
+        );
+
+        const accessToken = tokenResponse.data.access_token;
+
+        return res.json({
+            message: "Facebook connected successfully",
+            accessToken,
+        });
+
+    } catch (error) {
+    const err = error as AxiosError;
+
+    console.error(
+        err.response?.data || err.message
+    );
+
+    return res.status(500).json({
+        error: "Token exchange failed",
+    });
+}
+
 
 export default router;
