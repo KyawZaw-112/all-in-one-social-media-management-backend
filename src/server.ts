@@ -1,13 +1,11 @@
 // src/server.ts
 // IMPORTANT: Load env FIRST before any other imports
-"use client"
 import "./env.js";
 
 import express from "express";
 import cors from "cors";
 import oauthRoutes from "./routes/oauth.js";
 import subscriptions from "./routes/subscriptions.js";
-import posts from "./routes/posts.js";
 import payments from "./routes/payments.js";
 import platforms from "./routes/platforms.js";
 import adminPayments from "./routes/adminPayments.js";
@@ -31,7 +29,6 @@ app.use("/api/oauth", oauthRoutes);
 
 
 app.use("/subscriptions", subscriptions);
-app.use("/posts", posts);
 app.use("/payments", payments);
 app.use("/platforms", platforms);
 app.use("/admin", adminRoutes);
