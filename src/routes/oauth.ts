@@ -13,7 +13,7 @@ router.get("/facebook", (req, res) => {
         client_id: `${process.env.FACEBOOK_APP_ID}`,
         redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
         response_type: "code",
-        scope: "email",
+        scope: "pages_show_list",
     });
 
     const facebookUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
@@ -42,6 +42,7 @@ router.get("/facebook/callback", async (req, res) => {
                     client_secret: `${process.env.FACEBOOK_APP_SECRET}`,
                     redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
                     code,
+                    scope: "pages_show_list",
                 },
             }
         );
