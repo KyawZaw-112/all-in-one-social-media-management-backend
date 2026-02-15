@@ -25,7 +25,6 @@ router.post("/facebook", async (req, res) => {
 
             if (event?.message?.text) {
                 console.log("Incoming message:", event.message.text);
-                // Auto reply logic here
             }
         }
     }
