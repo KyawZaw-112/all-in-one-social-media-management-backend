@@ -12,21 +12,13 @@ import adminPayments from "./routes/adminPayments.js";
 import adminRoutes from "./routes/admin.js";
 import adminUsersRoutes from "./routes/admin.users.routes.js";
 import autoReplyRoutes from './routes/autoReply.js';
-import { env } from "./config/env.js";
 const app = express();
-
 app.use(cors());
 app.use(express.json());
-
 // Health check endpoint
 app.get("/health", (req, res) => {
     res.json({ status: "ok", message: "Backend is running" });
 });
-
-import logLoginRouter from "./routes/log-login.js";
-
-app.use("/api/log-login", logLoginRouter);
-
 app.use("/api/oauth", oauthRoutes);
 app.use("/subscriptions", subscriptions);
 app.use("/payments", payments);
@@ -34,12 +26,10 @@ app.use("/platforms", platforms);
 app.use("/admin", adminRoutes);
 app.use("/admin/users", adminUsersRoutes);
 app.use("/admin/payments", adminPayments);
-app.use("/dashboard/auto-reply",autoReplyRoutes)
+app.use("/dashboard/auto-reply", autoReplyRoutes);
 app.get("/", (req, res) => {
     res.send("Welcome to the API");
-})
-
-
+});
 app.listen(4000, () => {
     console.log("🚀 Server is running on http://localhost:4000");
 });
