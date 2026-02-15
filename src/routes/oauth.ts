@@ -10,8 +10,8 @@ const router = express.Router();
  */
 router.get("/facebook", (req, res) => {
     const params = new URLSearchParams({
-        client_id: env.FACEBOOK_APP_ID,
-        redirect_uri: env.FACEBOOK_REDIRECT_URI,
+        client_id: `${process.env.FACEBOOK_APP_ID}`,
+        redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
         response_type: "code",
         scope: "email",
     });
@@ -38,9 +38,9 @@ router.get("/facebook/callback", async (req, res) => {
             "https://graph.facebook.com/v19.0/oauth/access_token",
             {
                 params: {
-                    client_id: env.FACEBOOK_APP_ID,
-                    client_secret: env.FACEBOOK_APP_SECRET,
-                    redirect_uri: env.FACEBOOK_REDIRECT_URI,
+                    client_id: `${process.env.FACEBOOK_APP_ID}`,
+                    client_secret: `${process.env.FACEBOOK_APP_SECRET}`,
+                    redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
                     code,
                 },
             }
