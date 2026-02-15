@@ -1,12 +1,13 @@
 import axios from "axios";
 import { env } from "../config/env.js";
 
-export function getFacebookAuthUrl() {
+export function getFacebookAuthUrl(userId: string) {
     const params = new URLSearchParams({
         client_id: env.FACEBOOK_APP_ID,
         redirect_uri: env.FACEBOOK_REDIRECT_URI,
         scope: "pages_show_list,pages_read_engagement,pages_manage_metadata",
         response_type: "code",
+        state: userId,
     });
 
     return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;

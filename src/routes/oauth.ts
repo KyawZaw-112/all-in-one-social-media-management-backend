@@ -1,44 +1,50 @@
 import { Router } from "express";
 import {
-    getFacebookAuthUrl,
     exchangeCodeForToken,
     getUserPages,
 } from "../services/facebook.services.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
 import { env } from "../config/env.js";
 
 const router = Router();
 
-/**
- * Step 1: Redirect to Facebook
- */
-router.get("/facebook", (req, res) => {
-    const url = getFacebookAuthUrl();
-    return res.redirect(url);
-});
-
-/**
- * Step 2: Facebook Callback
- */
 router.get("/facebook/callback", async (req, res) => {
     try {
-        const { code } = req.query;
+        const { code, state } = req.query;
 
         if (!code || typeof code !== "string") {
-            return res.status(400).json({ error: "Missing code" });
+            return res.redirect(
+                `${env.FRONTEND_URL}/dashboard/platforms?error=true`
+            );
         }
 
-        // Exchange code → user access token
+        const userId = state as string;
+
         const tokenData = await exchangeCodeForToken(code);
         const userAccessToken = tokenData.access_token;
 
-        // Get pages
         const pages = await getUserPages(userAccessToken);
 
-        // TODO: Save page_access_token to database here
+        for (const page of pages) {
+            await supabaseAdmin
+                .from("platform_connections")
+                .upsert(
+                    {
+                        user_id: userId,
+                        platform: "facebook",
+                        page_id: page.id,
+                        page_name: page.name,
+                        page_access_token: page.access_token,
+                        connected: true,
+                    },
+                    { onConflict: "user_id,page_id" }
+                );
+        }
 
         return res.redirect(
             `${env.FRONTEND_URL}/dashboard/platforms?success=true`
         );
+
     } catch (error: any) {
         console.error(error.response?.data || error.message);
 
