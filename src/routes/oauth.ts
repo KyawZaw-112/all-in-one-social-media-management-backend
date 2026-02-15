@@ -1,6 +1,7 @@
 import express from "express";
 import axios, {AxiosError} from "axios";
 import { env } from "../config/env.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ router.get("/facebook", (req, res) => {
         client_id: `${process.env.FACEBOOK_APP_ID}`,
         redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
         response_type: "code",
-        scope: "pages_show_list",
+        scope: "pages_show_list,pages_messaging,pages_manage_metadata",
     });
 
     const facebookUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
@@ -25,45 +26,65 @@ router.get("/facebook", (req, res) => {
  * STEP 2: Facebook Callback
  * GET /api/oauth/facebook/callback
  */
-router.get("/facebook/callback", async (req, res) => {
-    const { code } = req.query;
+router.get("/facebook/callback", async (req: any, res) => {
+    const { code, state } = req.query;
 
     if (!code) {
         return res.status(400).json({ error: "No code received" });
     }
 
     try {
-        // Exchange code for access token
+        // 1️⃣ Exchange code for USER access token
         const tokenResponse = await axios.get(
             "https://graph.facebook.com/v19.0/oauth/access_token",
             {
                 params: {
-                    client_id: `${process.env.FACEBOOK_APP_ID}`,
-                    client_secret: `${process.env.FACEBOOK_APP_SECRET}`,
-                    redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
+                    client_id: process.env.FACEBOOK_APP_ID,
+                    client_secret: process.env.FACEBOOK_APP_SECRET,
+                    redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
                     code,
-                    scope: "pages_show_list",
                 },
             }
         );
 
-        const accessToken = tokenResponse.data.access_token;
+        const userAccessToken = tokenResponse.data.access_token;
 
-        return res.json({
-            message: "Facebook connected successfully",
-            accessToken,
+        // 2️⃣ Get user's pages
+        const pagesResponse = await axios.get(
+            "https://graph.facebook.com/v19.0/me/accounts",
+            {
+                params: {
+                    access_token: userAccessToken,
+                },
+            }
+        );
+
+        const pages = pagesResponse.data.data;
+
+        if (!pages || pages.length === 0) {
+            return res.status(400).json({ error: "No pages found" });
+        }
+
+        // Example: save first page (later you can let user choose)
+        const page = pages[0];
+
+        await supabaseAdmin.from("platform_connections").insert({
+            user_id: state, // 👈 we will pass userId in state
+            platform: "facebook",
+            page_id: page.id,
+            page_name: page.name,
+            page_access_token: page.access_token,
+            connected: true,
         });
 
-    } catch (error) {
-    const err = error as AxiosError;
+        return res.json({
+            message: "Facebook Page connected successfully",
+            page_name: page.name,
+        });
 
-    console.error(
-        err.response?.data || err.message
-    );
-
-    return res.status(500).json({
-        error: "Token exchange failed",
-    })
+    } catch (error: any) {
+        console.error(error.response?.data || error.message);
+        return res.status(500).json({ error: "Facebook connection failed" });
     }
 });
 
