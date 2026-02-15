@@ -62,8 +62,9 @@ router.get("/facebook/callback", async (req, res) => {
 
     return res.status(500).json({
         error: "Token exchange failed",
-    });
-}
+    })
+    }
+});
 
 
 export default router;
