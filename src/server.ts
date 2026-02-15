@@ -12,6 +12,7 @@ import adminPayments from "./routes/adminPayments.js";
 import adminRoutes from "./routes/admin.js";
 import adminUsersRoutes from "./routes/admin.users.routes.js";
 import autoReplyRoutes from './routes/autoReply.js';
+import webhookRoutes from "./routes/webhook.js";
 import { env } from "./config/env.js";
 const app = express();
 
@@ -26,7 +27,7 @@ app.get("/health", (req, res) => {
 import logLoginRouter from "./routes/log-login.js";
 
 app.use("/api/log-login", logLoginRouter);
-
+app.use("/api/webhook", webhookRoutes);
 app.use("/api/oauth", oauthRoutes);
 app.use("/subscriptions", subscriptions);
 app.use("/payments", payments);
