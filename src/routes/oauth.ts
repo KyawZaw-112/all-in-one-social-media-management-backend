@@ -81,5 +81,29 @@ router.get("/facebook/callback", async (req, res) => {
     }
 });
 
+// DELETE /api/platforms/:pageId
+router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { pageId } = req.params;
+
+        const { error } = await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("user_id", userId)
+            .eq("page_id", pageId)
+            .eq("platform", "facebook");
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Disconnect failed" });
+    }
+});
+
+
 
 export default router;
