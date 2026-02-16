@@ -1,8 +1,9 @@
-import { runRuleEngine } from "../services/ruleEngine.js";
-import { sendMessage } from "../services/facebook.services.js";
-import { supabaseAdmin } from "../supabaseAdmin.js";
-import { Request, Response } from "express";
-export const verifyWebhook = (req:Request, res:Response) => {
+import {runRuleEngine} from "../services/ruleEngine.js";
+import {sendMessage} from "../services/facebook.services.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
+import {Request, Response} from "express";
+
+export const verifyWebhook = (req: Request, res: Response) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
 
     const mode = req.query["hub.mode"];
@@ -16,7 +17,7 @@ export const verifyWebhook = (req:Request, res:Response) => {
     return res.sendStatus(403);
 };
 
-export const handleWebhook = async (req:Request, res:Response) => {
+export const handleWebhook = async (req: Request, res: Response) => {
     const body = req.body;
 
     if (body.object !== "page") {
@@ -32,7 +33,7 @@ export const handleWebhook = async (req:Request, res:Response) => {
 
                 const senderId = event.sender.id;
 
-                const { data } = await supabaseAdmin
+                const {data} = await supabaseAdmin
                     .from("platform_connections")
                     .select("page_access_token")
                     .eq("page_id", pageId)
@@ -44,16 +45,31 @@ export const handleWebhook = async (req:Request, res:Response) => {
                     console.error("No access token found for page:", pageId);
                     continue;
                 }
-                await sendMessage(
+                const reply = await runRuleEngine(
                     pageId,
-                    data.page_access_token,
-                    senderId,
-                    "Test message from RuleBot!"
-                )
+                    event.message.text
+                );
+
+                if (reply) {
+                    await sendMessage(
+                        pageId,
+                        data.page_access_token,
+                        senderId,
+                        reply
+                    );
+
+                    // Save outgoing message
+                    await supabaseAdmin.from("messages").insert({
+                        page_id: pageId,
+                        sender_id: senderId,
+                        body: reply,
+                        direction: "outgoing"
+                    })
+                }
             }
         }
+
+
+        res.sendStatus(200);
     }
-
-
-    res.sendStatus(200);
 };

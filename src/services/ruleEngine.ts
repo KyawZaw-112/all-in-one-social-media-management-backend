@@ -1,22 +1,21 @@
-import { supabaseAdmin } from "../supabaseAdmin.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
 
-export async function runRuleEngine(  pageId: string,
-                                      messageText: string,
-                                      triggerType: "comment" | "message" | "messenger") {
-    const { data: rules } = await supabaseAdmin
+export async function runRuleEngine(pageId: string,
+                                    messageText: string
+) {
+    const {data: rules} = await supabaseAdmin
         .from("auto_reply_rules")
         .select("*")
         .eq("page_id", pageId)
-        .eq("trigger_type", triggerType)
         .eq("enabled", true)
-        .order("priority", { ascending: true });
+        .order("priority", {ascending: true});
 
     if (!rules) return null;
 
     const lowerText = messageText.toLowerCase();
 
     for (const rule of rules) {
-        if (rule.match_type === "contains") {
+        if (rule.match_type === "exact" && messageText === rule.keyword) {
             if (lowerText.includes(rule.keyword.toLowerCase())) {
                 return rule.reply_text;
             }
@@ -28,6 +27,7 @@ export async function runRuleEngine(  pageId: string,
             }
         }
     }
+    const fallback = rules.find(r=>r.match_type === "fallback");
 
-    return null;
+    return fallback?.reply_text ?? null;
 }
