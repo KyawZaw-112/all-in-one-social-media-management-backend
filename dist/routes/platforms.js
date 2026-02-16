@@ -10,10 +10,13 @@ const router = Router();
 router.get("/", requireAuth, async (req, res) => {
     const { data } = await supabaseAdmin
         .from("platform_connections")
-        .select("page_id, page_name, connected")
+        .select("platform, connected")
         .eq("user_id", req.user.id)
         .eq("platform", "facebook");
-    res.json(data || []);
+    res.json((data || []).map((item) => ({
+        platform: item.platform,
+        connected: item.connected,
+    })));
 });
 /**
  * POST /platforms/connect

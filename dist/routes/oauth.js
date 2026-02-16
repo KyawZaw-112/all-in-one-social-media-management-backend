@@ -62,7 +62,7 @@ router.get("/facebook/callback", async (req, res) => {
         console.log("INSERT ERROR:", error);
         console.log("PAGE DATA:", page);
         console.log("State", state);
-        return res.redirect(`${process.env.FRONTEND_URL}/platforms?connected=facebook`);
+        return res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     }
     catch (error) {
         console.error(error.response?.data || error.message);
