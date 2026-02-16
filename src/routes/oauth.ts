@@ -69,7 +69,7 @@ router.get("/facebook/callback", async (req, res) => {
         }
 
         res.redirect(`${process.env.FRONTEND_URL}dashboard/platforms`);
-    } catch (error) {
+    } catch (error:any) {
         console.error("OAuth Error:", error.response?.data || error.message);
         res.status(500).send("OAuth failed");
     }
