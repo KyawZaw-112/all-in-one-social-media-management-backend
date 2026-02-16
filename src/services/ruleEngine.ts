@@ -15,18 +15,27 @@ export async function runRuleEngine(pageId: string,
     const lowerText = messageText.toLowerCase();
 
     for (const rule of rules) {
-        if (rule.match_type === "exact" && messageText === rule.keyword) {
-            if (lowerText.includes(rule.keyword.toLowerCase())) {
+        const keyword = rule.keyword.toLowerCase();
+
+        if (rule.match_type === "contains") {
+            if (lowerText.includes(keyword)) {
                 return rule.reply_text;
             }
         }
 
         if (rule.match_type === "exact") {
-            if (lowerText === rule.keyword.toLowerCase()) {
+            if (lowerText === keyword) {
+                return rule.reply_text;
+            }
+        }
+
+        if (rule.match_type === "starts_with") {
+            if (lowerText.startsWith(keyword)) {
                 return rule.reply_text;
             }
         }
     }
+
     const fallback = rules.find(r=>r.match_type === "fallback");
 
     return fallback?.reply_text ?? null;

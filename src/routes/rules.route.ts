@@ -37,4 +37,36 @@ router.post("/", requireAuth, async (req, res) => {
     res.json(data);
 });
 
+router.put("/:id", requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const { keyword, reply_text, enabled } = req.body;
+
+    const { data, error } = await supabaseAdmin
+        .from("auto_reply_rules")
+        .update({ keyword, reply_text, enabled })
+        .eq("id", id)
+        .eq("user_id", req.user.id)
+        .select()
+        .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+
+    res.json(data);
+});
+
+router.delete("/:id", requireAuth, async (req, res) => {
+    const { id } = req.params;
+
+    const { error } = await supabaseAdmin
+        .from("auto_reply_rules")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", req.user.id);
+
+    if (error) return res.status(400).json({ error: error.message });
+
+    res.json({ success: true });
+});
+
+
 export default router;
