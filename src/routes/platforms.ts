@@ -1,7 +1,7 @@
-import { Router } from "express";
-import { requireAuth } from "../middleware/requireAuth.js";
-import { supabaseAdmin } from "../supabaseAdmin.js";
-import { getFacebookAuthUrl } from "../services/facebook.services.js";
+import {Router} from "express";
+import {requireAuth} from "../middleware/requireAuth.js";
+import {supabaseAdmin} from "../supabaseAdmin.js";
+import {getFacebookAuthUrl} from "../services/facebook.services.js";
 
 const router = Router();
 
@@ -10,32 +10,29 @@ const router = Router();
  * Return connected Facebook pages
  */
 router.get("/", requireAuth, async (req: any, res) => {
-    const { data } = await supabaseAdmin
+    const {data , error} = await supabaseAdmin
         .from("platform_connections")
         .select("platform, connected")
         .eq("user_id", req.user.id)
         .eq("platform", "facebook");
 
-    res.json(
-        (data || []).map((item) => ({
-            platform: item.platform,
-            connected: item.connected,
-        }))
-    );
+    if(error) return res.status(400).send({error: error.message});
+
+    res.json(data || [])
 });
 
 /**
  * POST /platforms/connect
  */
 router.post("/connect", requireAuth, async (req: any, res) => {
-    const { platform } = req.body;
+    const {platform} = req.body;
 
     if (platform === "facebook") {
         const url = getFacebookAuthUrl(req.user.id);
-        return res.json({ url });
+        return res.json({url});
     }
 
-    res.status(400).json({ error: "Unsupported platform" });
+    res.status(400).json({error: "Unsupported platform"});
 });
 
 export default router;
