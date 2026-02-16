@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-
+import fetch from "node-fetch";
 export function getFacebookAuthUrl(userId: string) {
     const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID!,
@@ -39,4 +39,23 @@ export async function getUserPages(userAccessToken: string) {
     );
 
     return data.data;
+}
+
+export async function sendMessage(
+    pageId: string,
+    pageToken: string,
+    recipientId: string,
+    text: string
+): Promise<void> {
+    await fetch(
+        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                recipient: { id: recipientId },
+                message: { text },
+            }),
+        }
+    );
 }
