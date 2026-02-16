@@ -27,59 +27,52 @@ router.get("/facebook", (req, res) => {
  * GET /oauth/facebook/callback
  */
 router.get("/facebook/callback", async (req, res) => {
-    const { code } = req.query;
+    try {
+        const { code } = req.query;
 
-    // 1️⃣ Exchange code for user access token
-    const tokenRes = await axios.get(
-        "https://graph.facebook.com/v19.0/oauth/access_token",
-        {
-            params: {
-                client_id: process.env.FACEBOOK_APP_ID,
-                client_secret: process.env.FACEBOOK_APP_SECRET,
-                redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
-                code,
-            },
-        }
-    );
-
-    const userAccessToken = tokenRes.data.access_token;
-
-    // 2️⃣ Get pages
-    const pagesRes = await axios.get(
-        "https://graph.facebook.com/v19.0/me/accounts",
-        {
-            params: {
-                access_token: userAccessToken,
-            },
-        }
-    );
-
-    const pages = pagesRes.data.data;
-
-    for (const page of pages) {
-
-        // 3️⃣ Save page to DB
-        await supabaseAdmin.from("platform_connections").upsert({
-            page_id: page.id,
-            page_name: page.name,
-            page_access_token: page.access_token,
-        });
-
-        // 🔥 4️⃣ Subscribe page to webhook (IMPORTANT)
-        await axios.post(
-            `https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`,
-            {},
+        const tokenRes = await axios.get(
+            "https://graph.facebook.com/v19.0/oauth/access_token",
             {
                 params: {
-                    access_token: page.access_token,
+                    client_id: process.env.FACEBOOK_APP_ID,
+                    client_secret: process.env.FACEBOOK_APP_SECRET,
+                    redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
+                    code,
                 },
             }
         );
 
-        console.log("Subscribed page:", page.name);
-    }
+        const userAccessToken = tokenRes.data.access_token;
 
-    res.redirect("https://all-in-one-social-media-management-ashy.vercel.app/dashboard/platforms");
+        const pagesRes = await axios.get(
+            "https://graph.facebook.com/v19.0/me/accounts",
+            {
+                params: { access_token: userAccessToken },
+            }
+        );
+
+        const pages = pagesRes.data.data;
+
+        for (const page of pages) {
+            await supabaseAdmin.from("platform_connections").upsert({
+                user_id: req.user.id, // ⚠️ user_id ထည့်ရန်မမေ့ပါနဲ့
+                page_id: page.id,
+                page_name: page.name,
+                page_access_token: page.access_token,
+            });
+
+            await axios.post(
+                `https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`,
+                {},
+                { params: { access_token: page.access_token } }
+            );
+        }
+
+        res.redirect(`${process.env.FRONTEND_URL}dashboard/platforms`);
+    } catch (error) {
+        console.error("OAuth Error:", error.response?.data || error.message);
+        res.status(500).send("OAuth failed");
+    }
 });
 
 
