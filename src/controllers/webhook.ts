@@ -26,17 +26,11 @@ export const handleWebhook = async (req:Request, res:Response) => {
     for (const entry of body.entry) {
         const pageId = entry.id;
 
-        // Messenger events
         if (entry.messaging) {
             for (const event of entry.messaging) {
                 if (!event?.message?.text) continue;
 
                 const senderId = event.sender.id;
-                const text = event.message.text;
-
-                const reply = await runRuleEngine(pageId, text, "messenger");
-
-                if (!reply) continue;
 
                 const { data } = await supabaseAdmin
                     .from("platform_connections")
@@ -44,12 +38,23 @@ export const handleWebhook = async (req:Request, res:Response) => {
                     .eq("page_id", pageId)
                     .single();
 
-                if (!data) continue;
+                console.log("Token:", data);
 
-                await sendMessage(pageId, data.page_access_token, senderId, reply);
+                try {
+                    await sendMessage(
+                        pageId,
+                        data.page_access_token,
+                        senderId,
+                        "Test reply 🚀"
+                    );
+                    console.log("Sent test reply");
+                } catch (err: any) {
+                    console.error("Send error:", err.response?.data || err.message);
+                }
             }
         }
     }
+
 
     res.sendStatus(200);
 };
