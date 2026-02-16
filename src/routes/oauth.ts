@@ -79,7 +79,7 @@ router.get("/facebook/callback", async (req: any, res) => {
                     page_access_token: page.access_token,
                     connected: true,
                 },
-                {onConflict: "page_id"}
+                {onConflict: "user_id,page_id"}
             );
 
         console.log("INSERT RESULT:", data);
