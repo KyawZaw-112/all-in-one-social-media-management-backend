@@ -24,7 +24,7 @@ router.get("/facebook", (req, res) => {
 
 /**
  * STEP 2: Facebook Callback
- * GET /api/oauth/facebook/callback
+ * GET /oauth/facebook/callback
  */
 router.get("/facebook/callback", async (req, res) => {
     const { code } = req.query;
@@ -79,7 +79,7 @@ router.get("/facebook/callback", async (req, res) => {
         console.log("Subscribed page:", page.name);
     }
 
-    res.redirect("https://all-in-one-social-media-management-ashy.vercel.app/dashboard/platforms");
+    res.redirect("https://your-frontend-url.com/platforms");
 });
 
 
