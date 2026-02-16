@@ -87,10 +87,9 @@ router.get("/facebook/callback", async (req: any, res) => {
         console.log("PAGE DATA:", page);
         console.log("State", state)
 
-        return res.json({
-            message: "Facebook Page connected successfully",
-            page_name: page.name,
-        });
+        return res.redirect(
+            `${process.env.FRONTEND_URL}/platforms?connected=facebook`
+        );
 
     } catch (error: any) {
         console.error(error.response?.data || error.message);
