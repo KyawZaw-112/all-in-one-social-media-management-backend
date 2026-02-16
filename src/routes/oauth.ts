@@ -62,6 +62,8 @@ router.get("/facebook/callback", async (req, res) => {
                 page_access_token: page.access_token,
             });
         }
+        console.log("Pages:", pagesRes.data.data);
+
 
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
     } catch (error: any) {
