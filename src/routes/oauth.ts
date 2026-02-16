@@ -79,7 +79,7 @@ router.get("/facebook/callback", async (req, res) => {
         console.log("Subscribed page:", page.name);
     }
 
-    res.redirect("https://your-frontend-url.com/platforms");
+    res.redirect("https://all-in-one-social-media-management-ashy.vercel.app/dashboard/platforms");
 });
 
 
