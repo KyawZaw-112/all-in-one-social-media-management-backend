@@ -6,6 +6,31 @@ import {requireAuth} from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
+async function subscribePageToWebhook(
+    pageId: string,
+    pageAccessToken: string
+) {
+    try {
+        const response = await axios.post(
+            `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
+            {},
+            {
+                params: {
+                    access_token: pageAccessToken,
+                },
+            }
+        );
+
+        console.log("Subscribed:", pageId, response.data);
+    } catch (err: any) {
+        console.error(
+            "Subscription error:",
+            err.response?.data || err.message
+        );
+    }
+}
+
+
 router.get("/", requireAuth, async (req, res) => {
     const userId = req.user.id;
 
@@ -95,6 +120,8 @@ router.get("/facebook/callback", async (req, res) => {
             if (error) {
                 console.error("Insert error:", error);
             }
+            // 🔥 SUBSCRIBE PAGE TO WEBHOOK (THIS IS THE MISSING PART)
+            await subscribePageToWebhook(page.id, page.access_token);
         }
 
         console.log("User ID:", userId);

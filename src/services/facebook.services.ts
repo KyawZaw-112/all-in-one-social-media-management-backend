@@ -1,6 +1,7 @@
 import axios from "axios";
 import { env } from "../config/env.js";
 import fetch from "node-fetch";
+
 export function getFacebookAuthUrl(userId: string) {
     const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID!,
@@ -29,6 +30,26 @@ export async function exchangeCodeForToken(code: string) {
 
     return data;
 }
+
+export async function subscribePageToWebhook(
+    pageId: string,
+    pageAccessToken: string
+) {
+    const response = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                access_token: pageAccessToken,
+            }),
+        }
+    );
+
+    const data = await response.json();
+    console.log("Subscribe response:", data);
+}
+
 
 export async function getUserPages(userAccessToken: string) {
     const { data } = await axios.get(
