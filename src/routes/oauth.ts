@@ -1,6 +1,6 @@
 import express from "express";
 import axios, {AxiosError} from "axios";
-import { env } from "../config/env.js";
+import {env} from "../config/env.js";
 import {supabaseAdmin} from "../supabaseAdmin.js";
 
 const router = express.Router();
@@ -27,10 +27,10 @@ router.get("/facebook", (req, res) => {
  * GET /api/oauth/facebook/callback
  */
 router.get("/facebook/callback", async (req: any, res) => {
-    const { code, state } = req.query;
+    const {code, state} = req.query;
 
     if (!code) {
-        return res.status(400).json({ error: "No code received" });
+        return res.status(400).json({error: "No code received"});
     }
 
     try {
@@ -62,20 +62,30 @@ router.get("/facebook/callback", async (req: any, res) => {
         const pages = pagesResponse.data.data;
 
         if (!pages || pages.length === 0) {
-            return res.status(400).json({ error: "No pages found" });
+            return res.status(400).json({error: "No pages found"});
         }
 
         // Example: save first page (later you can let user choose)
         const page = pages[0];
 
-        await supabaseAdmin.from("platform_connections").insert({
-            user_id: state, // 👈 we will pass userId in state
-            platform: "facebook",
-            page_id: page.id,
-            page_name: page.name,
-            page_access_token: page.access_token,
-            connected: true,
-        });
+        const {data, error} = await supabaseAdmin
+            .from("platform_connections")
+            .upsert(
+                {
+                    user_id: state,
+                    platform: "facebook",
+                    page_id: page.id,
+                    page_name: page.name,
+                    page_access_token: page.access_token,
+                    connected: true,
+                },
+                {onConflict: "page_id"}
+            );
+
+        console.log("INSERT RESULT:", data);
+        console.log("INSERT ERROR:", error);
+        console.log("PAGE DATA:", page);
+        console.log("State", state)
 
         return res.json({
             message: "Facebook Page connected successfully",
@@ -84,7 +94,7 @@ router.get("/facebook/callback", async (req: any, res) => {
 
     } catch (error: any) {
         console.error(error.response?.data || error.message);
-        return res.status(500).json({ error: "Facebook connection failed" });
+        return res.status(500).json({error: "Facebook connection failed"});
     }
 });
 
