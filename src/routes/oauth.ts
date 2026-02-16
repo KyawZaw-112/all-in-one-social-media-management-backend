@@ -10,26 +10,30 @@ const router = express.Router();
  * STEP 1: Redirect user to Facebook OAuth
  * GET /api/oauth/facebook
  */
-router.get("/facebook", (req, res) => {
+router.get("/facebook", async (req, res) => {
+    const userId = req.query.userId as string; // frontend ကပို့မယ်
+
     const params = new URLSearchParams({
-        client_id: `${process.env.FACEBOOK_APP_ID}`,
-        redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
+        client_id: process.env.FACEBOOK_APP_ID!,
+        redirect_uri: process.env.FACEBOOK_REDIRECT_URI!,
         response_type: "code",
         scope: "pages_show_list,pages_messaging,pages_manage_metadata",
+        state: userId, // 🔥 user id store
     });
 
-    const facebookUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
-
-    return res.redirect(facebookUrl);
+    res.redirect(`https://www.facebook.com/v19.0/dialog/oauth?${params}`);
 });
+
 
 /**
  * STEP 2: Facebook Callback
  * GET /oauth/facebook/callback
  */
-router.get("/facebook/callback",requireAuth, async (req, res) => {
+router.get("/facebook/callback", async (req, res) => {
     try {
-        const { code } = req.query;
+        const { code, state } = req.query;
+
+        const userId = state as string;
 
         const tokenRes = await axios.get(
             "https://graph.facebook.com/v19.0/oauth/access_token",
@@ -47,34 +51,25 @@ router.get("/facebook/callback",requireAuth, async (req, res) => {
 
         const pagesRes = await axios.get(
             "https://graph.facebook.com/v19.0/me/accounts",
-            {
-                params: { access_token: userAccessToken },
-            }
+            { params: { access_token: userAccessToken } }
         );
 
-        const pages = pagesRes.data.data;
-
-        for (const page of pages) {
+        for (const page of pagesRes.data.data) {
             await supabaseAdmin.from("platform_connections").upsert({
-                user_id: req.user.id, // ⚠️ user_id ထည့်ရန်မမေ့ပါနဲ့
+                user_id: userId, // ✅ now safe
                 page_id: page.id,
                 page_name: page.name,
                 page_access_token: page.access_token,
             });
-
-            await axios.post(
-                `https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`,
-                {},
-                { params: { access_token: page.access_token } }
-            );
         }
 
-        res.redirect(`${process.env.FRONTEND_URL}dashboard/platforms`);
-    } catch (error:any) {
-        console.error("OAuth Error:", error.response?.data || error.message);
-        res.status(500).send("OAuth failed");
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
+    } catch (error: any) {
+        console.error(error.response?.data || error.message);
+        res.status(500).json({ error: "OAuth failed" });
     }
 });
+
 
 
 export default router;
