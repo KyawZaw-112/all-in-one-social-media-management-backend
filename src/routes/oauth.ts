@@ -2,6 +2,7 @@ import express from "express";
 import axios, {AxiosError} from "axios";
 import {env} from "../config/env.js";
 import {supabaseAdmin} from "../supabaseAdmin.js";
+import {requireAuth} from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get("/facebook", (req, res) => {
  * STEP 2: Facebook Callback
  * GET /oauth/facebook/callback
  */
-router.get("/facebook/callback", async (req, res) => {
+router.get("/facebook/callback",requireAuth, async (req, res) => {
     try {
         const { code } = req.query;
 
