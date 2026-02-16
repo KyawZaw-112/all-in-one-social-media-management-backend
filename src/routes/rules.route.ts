@@ -7,14 +7,19 @@ const router = Router();
 router.get("/:pageId", requireAuth, async (req, res) => {
     const { pageId } = req.params;
 
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
         .from("auto_reply_rules")
         .select("*")
         .eq("page_id", pageId)
         .eq("user_id", req.user.id);
 
-    res.json(data);
+    if (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    res.json(data ?? []);
 });
+
 
 router.post("/", requireAuth, async (req, res) => {
     const { page_id, keyword, reply_text } = req.body;
