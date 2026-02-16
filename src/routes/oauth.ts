@@ -6,6 +6,27 @@ import {requireAuth} from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
+router.get("/", requireAuth, async (req, res) => {
+    const userId = req.user.id;
+
+    const { data, error } = await supabaseAdmin
+        .from("platform_connections")
+        .select("page_id, page_name")
+        .eq("user_id", userId)
+        .eq("platform", "facebook");
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.json(
+        data.map((p) => ({
+            id: p.page_id,
+            name: p.page_name,
+            ruleCount: 0,
+        }))
+    );
+});
 
 
 /**
