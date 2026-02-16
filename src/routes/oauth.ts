@@ -61,17 +61,19 @@ router.get("/facebook/callback", async (req, res) => {
                 .upsert(
                     {
                         user_id: userId,
+                        platform: "facebook",   // 🔥 THIS WAS MISSING
                         page_id: page.id,
                         page_name: page.name,
                         page_access_token: page.access_token,
                     },
-                    { onConflict: "user_id,page_id" } // 🔥 VERY IMPORTANT
+                    { onConflict: "user_id,page_id" }
                 );
 
             if (error) {
                 console.error("Insert error:", error);
             }
         }
+
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
     } catch (error: any) {
         console.error(error.response?.data || error.message);
