@@ -56,14 +56,22 @@ router.get("/facebook/callback", async (req, res) => {
         );
 
         for (const page of pagesRes.data.data) {
-            await supabaseAdmin.from("platform_connections").upsert({
-                user_id: userId, // ✅ now safe
-                page_id: page.id,
-                page_name: page.name,
-                page_access_token: page.access_token,
-            });
+            const { error } = await supabaseAdmin
+                .from("platform_connections")
+                .upsert(
+                    {
+                        user_id: userId,
+                        page_id: page.id,
+                        page_name: page.name,
+                        page_access_token: page.access_token,
+                    },
+                    { onConflict: "user_id,page_id" } // 🔥 VERY IMPORTANT
+                );
+
+            if (error) {
+                console.error("Insert error:", error);
+            }
         }
-        console.log("Pages:", pagesRes.data.data);
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
     } catch (error: any) {
         console.error(error.response?.data || error.message);
