@@ -26,75 +26,60 @@ router.get("/facebook", (req, res) => {
  * STEP 2: Facebook Callback
  * GET /api/oauth/facebook/callback
  */
-router.get("/facebook/callback", async (req: any, res) => {
-    const {code, state} = req.query;
+router.get("/facebook/callback", async (req, res) => {
+    const { code } = req.query;
 
-    if (!code) {
-        return res.status(400).json({error: "No code received"});
-    }
-
-    try {
-        // 1️⃣ Exchange code for USER access token
-        const tokenResponse = await axios.get(
-            "https://graph.facebook.com/v19.0/oauth/access_token",
-            {
-                params: {
-                    client_id: process.env.FACEBOOK_APP_ID,
-                    client_secret: process.env.FACEBOOK_APP_SECRET,
-                    redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
-                    code,
-                },
-            }
-        );
-
-        const userAccessToken = tokenResponse.data.access_token;
-
-        // 2️⃣ Get user's pages
-        const pagesResponse = await axios.get(
-            "https://graph.facebook.com/v19.0/me/accounts",
-            {
-                params: {
-                    access_token: userAccessToken,
-                },
-            }
-        );
-
-        const pages = pagesResponse.data.data;
-
-        if (!pages || pages.length === 0) {
-            return res.status(400).json({error: "No pages found"});
+    // 1️⃣ Exchange code for user access token
+    const tokenRes = await axios.get(
+        "https://graph.facebook.com/v19.0/oauth/access_token",
+        {
+            params: {
+                client_id: process.env.FACEBOOK_APP_ID,
+                client_secret: process.env.FACEBOOK_APP_SECRET,
+                redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
+                code,
+            },
         }
+    );
 
-        // Example: save first page (later you can let user choose)
-        const page = pages[0];
+    const userAccessToken = tokenRes.data.access_token;
 
-        const {data, error} = await supabaseAdmin
-            .from("platform_connections")
-            .upsert(
-                {
-                    user_id: state,
-                    platform: "facebook",
-                    page_id: page.id,
-                    page_name: page.name,
-                    page_access_token: page.access_token,
-                    connected: true,
+    // 2️⃣ Get pages
+    const pagesRes = await axios.get(
+        "https://graph.facebook.com/v19.0/me/accounts",
+        {
+            params: {
+                access_token: userAccessToken,
+            },
+        }
+    );
+
+    const pages = pagesRes.data.data;
+
+    for (const page of pages) {
+
+        // 3️⃣ Save page to DB
+        await supabaseAdmin.from("platform_connections").upsert({
+            page_id: page.id,
+            page_name: page.name,
+            page_access_token: page.access_token,
+        });
+
+        // 🔥 4️⃣ Subscribe page to webhook (IMPORTANT)
+        await axios.post(
+            `https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`,
+            {},
+            {
+                params: {
+                    access_token: page.access_token,
                 },
-                {onConflict: "user_id,page_id"}
-            );
-
-        console.log("INSERT RESULT:", data);
-        console.log("INSERT ERROR:", error);
-        console.log("PAGE DATA:", page);
-        console.log("State", state)
-
-        return res.redirect(
-            `${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`
+            }
         );
 
-    } catch (error: any) {
-        console.error(error.response?.data || error.message);
-        return res.status(500).json({error: "Facebook connection failed"});
+        console.log("Subscribed page:", page.name);
     }
+
+    res.redirect("https://all-in-one-social-media-management-ashy.vercel.app/dashboard/platforms");
 });
 
 
