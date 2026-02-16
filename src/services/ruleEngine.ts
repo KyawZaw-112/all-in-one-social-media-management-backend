@@ -1,42 +1,47 @@
 import {supabaseAdmin} from "../supabaseAdmin.js";
 
-export async function runRuleEngine(pageId: string,
-                                    messageText: string
+export async function runRuleEngine(
+    pageId: string,
+    messageText: string
 ) {
-    const {data: rules} = await supabaseAdmin
+    const { data: rules, error } = await supabaseAdmin
         .from("auto_reply_rules")
         .select("*")
-        .eq("page_id", pageId)
+        .eq("page_id", String(pageId))  // 🔥 force string match
         .eq("enabled", true)
-        .order("priority", {ascending: true});
+        .order("priority", { ascending: true });
 
-    if (!rules) return null;
+    if (error) {
+        console.error("Rule fetch error:", error);
+        return null;
+    }
+
+    if (!rules || rules.length === 0) {
+        console.log("No rules found for page:", pageId);
+        return null;
+    }
 
     const lowerText = messageText.toLowerCase();
 
     for (const rule of rules) {
-        const keyword = rule.keyword.toLowerCase();
+        const keyword = (rule.keyword ?? "").toLowerCase();
+        const type = rule.match_type ?? "contains"; // 🔥 default safety
 
-        if (rule.match_type === "contains") {
-            if (lowerText.includes(keyword)) {
-                return rule.reply_text;
-            }
+        if (type === "contains" && lowerText.includes(keyword)) {
+            return rule.reply_text;
         }
 
-        if (rule.match_type === "exact") {
-            if (lowerText === keyword) {
-                return rule.reply_text;
-            }
+        if (type === "exact" && lowerText === keyword) {
+            return rule.reply_text;
         }
 
-        if (rule.match_type === "starts_with") {
-            if (lowerText.startsWith(keyword)) {
-                return rule.reply_text;
-            }
+        if (type === "starts_with" && lowerText.startsWith(keyword)) {
+            return rule.reply_text;
         }
     }
 
-    const fallback = rules.find(r=>r.match_type === "fallback");
+    // fallback rule
+    const fallback = rules.find(r => r.match_type === "fallback");
 
     return fallback?.reply_text ?? null;
 }

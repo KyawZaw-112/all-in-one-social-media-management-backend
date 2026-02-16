@@ -16,7 +16,6 @@ export const verifyWebhook = (req: Request, res: Response) => {
 
     return res.sendStatus(403);
 };
-
 export const handleWebhook = async (req: Request, res: Response) => {
     const body = req.body;
 
@@ -24,36 +23,42 @@ export const handleWebhook = async (req: Request, res: Response) => {
         return res.sendStatus(404);
     }
 
-    for (const entry of body.entry) {
-        const pageId = entry.id;
+    try {
+        for (const entry of body.entry) {
+            const pageId = String(entry.id); // 🔥 ensure string match
+            console.log("Webhook Page ID:", pageId);
 
-        if (entry.messaging) {
+            if (!entry.messaging) continue;
+
             for (const event of entry.messaging) {
                 if (!event?.message?.text) continue;
 
                 const senderId = event.sender.id;
+                const messageText = event.message.text;
 
-                const {data} = await supabaseAdmin
+                console.log("Incoming message:", messageText);
+
+                // 🔥 get page access token
+                const { data: connection, error } = await supabaseAdmin
                     .from("platform_connections")
                     .select("page_access_token")
                     .eq("page_id", pageId)
                     .single();
 
-                console.log("Token:", data);
-
-                if (!data) {
-                    console.error("No access token found for page:", pageId);
+                if (error || !connection) {
+                    console.error("No access token for page:", pageId);
                     continue;
                 }
-                const reply = await runRuleEngine(
-                    pageId,
-                    event.message.text
-                );
+
+                // 🔥 run rule engine
+                const reply = await runRuleEngine(pageId, messageText);
+
+                console.log("Engine reply:", reply);
 
                 if (reply) {
                     await sendMessage(
                         pageId,
-                        data.page_access_token,
+                        connection.page_access_token,
                         senderId,
                         reply
                     );
@@ -64,12 +69,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         sender_id: senderId,
                         body: reply,
                         direction: "outgoing"
-                    })
+                    });
                 }
             }
         }
 
-
-        res.sendStatus(200);
+        return res.sendStatus(200); // 🔥 must be outside loop
+    } catch (err) {
+        console.error("Webhook error:", err);
+        return res.sendStatus(500);
     }
 };
