@@ -88,7 +88,7 @@ router.get("/facebook/callback", async (req: any, res) => {
         console.log("State", state)
 
         return res.redirect(
-            `${process.env.FRONTEND_URL}/platforms?connected=facebook`
+            `${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`
         );
 
     } catch (error: any) {
