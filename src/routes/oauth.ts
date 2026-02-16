@@ -16,7 +16,7 @@ router.get("/facebook", async (req, res) => {
     const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID!,
         redirect_uri: process.env.FACEBOOK_REDIRECT_URI!,
-        response_type: "code",
+        response_type: "rerequest",
         scope: "pages_show_list,pages_messaging,pages_manage_metadata",
         state: userId, // 🔥 user id store
     });
