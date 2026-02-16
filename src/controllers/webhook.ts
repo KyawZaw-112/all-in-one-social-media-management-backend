@@ -40,17 +40,16 @@ export const handleWebhook = async (req:Request, res:Response) => {
 
                 console.log("Token:", data);
 
-                try {
-                    await sendMessage(
-                        pageId,
-                        data.page_access_token,
-                        senderId,
-                        "Test reply 🚀"
-                    );
-                    console.log("Sent test reply");
-                } catch (err: any) {
-                    console.error("Send error:", err.response?.data || err.message);
+                if (!data) {
+                    console.error("No access token found for page:", pageId);
+                    continue;
                 }
+                await sendMessage(
+                    pageId,
+                    data.page_access_token,
+                    senderId,
+                    "Test message from RuleBot!"
+                )
             }
         }
     }
