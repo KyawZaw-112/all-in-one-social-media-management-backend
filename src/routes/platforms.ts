@@ -10,19 +10,25 @@ const router = Router();
  * Return connected Facebook pages
  */
 router.get("/", requireAuth, async (req: any, res) => {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
         .from("platform_connections")
-        .select("platform, connected")
+        .select("page_id, page_name")
         .eq("user_id", req.user.id)
         .eq("platform", "facebook");
 
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
     res.json(
-        (data || []).map((item) => ({
-            platform: item.platform,
-            connected: item.connected,
+        (data || []).map((page) => ({
+            id: page.page_id,
+            name: page.page_name,
+            ruleCount: 0,
         }))
     );
 });
+
 
 /**
  * POST /platforms/connect

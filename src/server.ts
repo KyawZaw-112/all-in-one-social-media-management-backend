@@ -1,7 +1,6 @@
 // src/server.ts
 // IMPORTANT: Load env FIRST before any other imports
 import "./env.js";
-console.log("OAuth Routes:", oauthRoutes);
 import express from "express";
 import cors from "cors";
 import oauthRoutes from "./routes/oauth.js";

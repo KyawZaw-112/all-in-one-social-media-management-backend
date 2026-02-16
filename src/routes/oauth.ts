@@ -6,6 +6,8 @@ import {requireAuth} from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
+
+
 /**
  * STEP 1: Redirect user to Facebook OAuth
  * GET /api/oauth/facebook
@@ -17,7 +19,7 @@ router.get("/facebook", async (req, res) => {
         client_id: process.env.FACEBOOK_APP_ID!,
         redirect_uri: process.env.FACEBOOK_REDIRECT_URI!,
         response_type: "code",
-        scope: "pages_show_list,pages_messaging,pages_manage_metadata",
+        scope: "pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging\n",
         state: userId, // 🔥 user id store
         auth_type: "rerequest", // 🔥 always ask for permissions
     });
