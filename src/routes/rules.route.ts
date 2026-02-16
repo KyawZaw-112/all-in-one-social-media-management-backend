@@ -22,16 +22,16 @@ router.get("/:pageId", requireAuth, async (req, res) => {
 
 
 router.post("/", requireAuth, async (req, res) => {
-    const { page_id, keyword, reply_text } = req.body;
+    const { page_id, keyword, reply_text, match_type } = req.body;
 
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
         .from("auto_reply_rules")
         .insert({
             user_id: req.user.id,
             page_id,
             keyword,
             reply_text,
-            match_type: "contains",
+            match_type: match_type ?? "contains",
             trigger_type: "messenger",
             enabled: true,
             priority: 1,
@@ -39,8 +39,14 @@ router.post("/", requireAuth, async (req, res) => {
         .select()
         .single();
 
+    if (error) {
+        console.error("INSERT ERROR:", error);
+        return res.status(400).json({ error: error.message });
+    }
+
     res.json(data);
 });
+
 
 router.put("/:id", requireAuth, async (req, res) => {
     const { id } = req.params;
