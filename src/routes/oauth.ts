@@ -77,6 +77,7 @@ router.get("/facebook/callback", async (req, res) => {
         // 🔥 Exchange for Long-Lived User Access Token
         let longLivedToken = userAccessToken;
         try {
+            console.log("🔄 Exchanging for long-lived token...");
             const exchangeRes = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
                 params: {
                     grant_type: "fb_exchange_token",
@@ -87,10 +88,25 @@ router.get("/facebook/callback", async (req, res) => {
             });
             if (exchangeRes.data.access_token) {
                 longLivedToken = exchangeRes.data.access_token;
+                console.log("✅ Long-lived token acquired");
             }
-        } catch (exErr) {
-            console.error("Token Exchange Warning:", exErr);
-            // Fallback to short-lived token if exchange fails
+
+            // 🔍 Debug Token Expiration
+            try {
+                const debugRes = await axios.get("https://graph.facebook.com/v19.0/debug_token", {
+                    params: {
+                        input_token: longLivedToken,
+                        access_token: `${process.env.FACEBOOK_APP_ID}|${process.env.FACEBOOK_APP_SECRET}`
+                    }
+                });
+                console.log("🧐 Token Debug Info:", JSON.stringify(debugRes.data.data, null, 2));
+            } catch (debugErr) {
+                console.error("⚠️ Failed to debug token:", debugErr);
+            }
+
+        } catch (exErr: any) {
+            console.error("❌ Token Exchange Failed:", exErr.response?.data || exErr.message);
+            // Fallback to short-lived token if exchange fails, but log it clearly
         }
 
         const pagesRes = await axios.get(
