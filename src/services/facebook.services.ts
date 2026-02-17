@@ -61,6 +61,7 @@ export async function subscribePageToWebhook(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 access_token: pageAccessToken,
+                subscribed_fields: ["messages"], // 👈 REQUIRED
             }),
         }
     );

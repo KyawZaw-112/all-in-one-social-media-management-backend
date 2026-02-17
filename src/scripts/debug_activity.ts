@@ -3,46 +3,48 @@ dotenv.config({ path: "./.env" });
 import { supabaseAdmin } from "../supabaseAdmin.js";
 
 async function checkRecentActivity() {
-    console.log("🔍 Checking recent conversations (Production)...");
-    const { data: convs, error: convError } = await supabaseAdmin
+    const merchantId = "40b42079-6636-4b09-b9c9-db9ec0d40b75";
+    console.log(`🔍 Debugging Activity for Merchant: ${merchantId}`);
+
+    // 1. Check recent conversations
+    const { data: convs } = await supabaseAdmin
         .from("conversations")
         .select("*")
+        .eq("merchant_id", merchantId)
         .order("created_at", { ascending: false })
         .limit(5);
 
-    if (convError) {
-        console.error("❌ Error fetching conversations:", convError);
-        return;
-    }
-
+    console.log("\n--- Recent Conversations ---");
     if (!convs || convs.length === 0) {
-        console.log("ℹ️ No conversations found in the database.");
-        return;
+        console.log("None found.");
+    } else {
+        convs.forEach(c => console.log(`[${c.status}] ID: ${c.id} | Created: ${c.created_at}`));
     }
 
-    console.log(`✅ Found ${convs.length} recent conversations:`);
-    for (const conv of convs) {
-        console.log(`\n--- Conversation ID: ${conv.id} ---`);
-        console.log(`Merchant: ${conv.merchant_id}`);
-        console.log(`Status: ${conv.status}`);
-        console.log(`Created: ${conv.created_at}`);
-        console.log(`Temp Data: ${JSON.stringify(conv.temp_data)}`);
+    // 2. Check ALL recent messages
+    const { data: msgs } = await supabaseAdmin
+        .from("messages")
+        .select("*, conversations(merchant_id)")
+        .order("created_at", { ascending: false })
+        .limit(10);
 
-        const { data: msgs } = await supabaseAdmin
-            .from("messages")
-            .select("*")
-            .eq("conversation_id", conv.id)
-            .order("created_at", { ascending: true });
-
-        if (msgs && msgs.length > 0) {
-            console.log("Messages:");
-            msgs.forEach(m => {
-                console.log(`  [${m.role.toUpperCase()}] ${m.content}`);
-            });
-        } else {
-            console.log("  (No messages found)");
-        }
+    console.log("\n--- Recent Messages (Across All Conversations) ---");
+    if (!msgs || msgs.length === 0) {
+        console.log("None found.");
+    } else {
+        msgs.forEach(m => {
+            console.log(`[${m.role.toUpperCase()}] ${m.content.substring(0, 50)}... (Conv: ${m.conversation_id})`);
+        });
     }
+
+    // 3. Check Flows
+    const { data: flows } = await supabaseAdmin
+        .from("automation_flows")
+        .select("*")
+        .eq("merchant_id", merchantId);
+
+    console.log("\n--- Automation Flows ---");
+    flows?.forEach(f => console.log(`Keyword: '${f.trigger_keyword}' | Active: ${f.is_active} | Business: ${f.business_type}`));
 }
 
 checkRecentActivity().catch(console.error);
