@@ -74,9 +74,28 @@ router.get("/facebook/callback", async (req, res) => {
 
         const userAccessToken = tokenRes.data.access_token;
 
+        // 🔥 Exchange for Long-Lived User Access Token
+        let longLivedToken = userAccessToken;
+        try {
+            const exchangeRes = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
+                params: {
+                    grant_type: "fb_exchange_token",
+                    client_id: process.env.FACEBOOK_APP_ID,
+                    client_secret: process.env.FACEBOOK_APP_SECRET,
+                    fb_exchange_token: userAccessToken,
+                },
+            });
+            if (exchangeRes.data.access_token) {
+                longLivedToken = exchangeRes.data.access_token;
+            }
+        } catch (exErr) {
+            console.error("Token Exchange Warning:", exErr);
+            // Fallback to short-lived token if exchange fails
+        }
+
         const pagesRes = await axios.get(
             "https://graph.facebook.com/v19.0/me/accounts",
-            { params: { access_token: userAccessToken } }
+            { params: { access_token: longLivedToken } }
         );
 
         for (const page of pagesRes.data.data) {
