@@ -87,7 +87,7 @@ export async function sendMessage(
     recipientId: string,
     text: string
 ): Promise<void> {
-    const response = await fetch(
+    await fetch(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
         {
             method: "POST",
@@ -98,11 +98,4 @@ export async function sendMessage(
             }),
         }
     );
-
-    const data = await response.json() as any;
-    if (!response.ok) {
-        console.error("❌ Facebook API Error:", data.error || data);
-    } else {
-        console.log("✅ Message sent to Facebook:", recipientId);
-    }
 }

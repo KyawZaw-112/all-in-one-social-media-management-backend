@@ -3,12 +3,12 @@ dotenv.config({ path: "./.env" });
 import { supabaseAdmin } from "../supabaseAdmin.js";
 
 async function checkRecentActivity() {
-    console.log("🔍 Checking recent conversations...");
+    console.log("🔍 Checking recent conversations (Production)...");
     const { data: convs, error: convError } = await supabaseAdmin
         .from("conversations")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(3);
+        .limit(5);
 
     if (convError) {
         console.error("❌ Error fetching conversations:", convError);
@@ -16,10 +16,11 @@ async function checkRecentActivity() {
     }
 
     if (!convs || convs.length === 0) {
-        console.log("ℹ️ No conversations found.");
+        console.log("ℹ️ No conversations found in the database.");
         return;
     }
 
+    console.log(`✅ Found ${convs.length} recent conversations:`);
     for (const conv of convs) {
         console.log(`\n--- Conversation ID: ${conv.id} ---`);
         console.log(`Merchant: ${conv.merchant_id}`);
