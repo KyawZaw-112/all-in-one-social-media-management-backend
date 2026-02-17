@@ -43,14 +43,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         if (!connection) return res.sendStatus(200);
 
-        const merchantId = connection.merchant_id;
+        const merchantId = connection.user_id;
 
-        // 2️⃣ Find existing active conversation
         let { data: conversation } = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("merchant_id", merchantId)
-            .eq("user_id", senderId)
+            .eq("user_psid", senderId)
             .eq("status", "active")
             .maybeSingle();
 
@@ -74,7 +73,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .from("conversations")
                 .insert({
                     merchant_id: merchantId,
-                    user_id: senderId,
+                    user_psid: senderId,
                     flow_id: flow.id,
                     temp_data: {},
                     status: "active",
