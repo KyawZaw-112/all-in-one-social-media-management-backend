@@ -65,6 +65,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .eq("is_active", true)
                 .maybeSingle();
 
+
+            console.log("Flow Query Merchant ID:", merchantId);
+
             if (errorFlow) {
                 console.log("Error fetching flow:", errorFlow);
                 return res.sendStatus(200);
