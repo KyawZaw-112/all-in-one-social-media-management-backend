@@ -1,5 +1,5 @@
 import axios from "axios";
-import {env} from "../config/env.js";
+import { env } from "../config/env.js";
 import fetch from "node-fetch";
 
 export function getFacebookAuthUrl(userId: string) {
@@ -17,7 +17,7 @@ export function getFacebookAuthUrl(userId: string) {
 export async function sendImageMessage(pageId: string, pageAccessToken: string, recipientId: string, imageUrl: string) {
     await axios.post(`https://graph.facebook.com/v19.0/me/messages`,
         {
-            recipient: {id: recipientId},
+            recipient: { id: recipientId },
             message: {
                 attachment: {
                     type: "image",
@@ -29,13 +29,13 @@ export async function sendImageMessage(pageId: string, pageAccessToken: string, 
             }
         },
         {
-            params: {access_token: pageAccessToken}
+            params: { access_token: pageAccessToken }
         }
     )
 }
 
 export async function exchangeCodeForToken(code: string) {
-    const {data} = await axios.get(
+    const { data } = await axios.get(
         "https://graph.facebook.com/v19.0/oauth/access_token",
         {
             params: {
@@ -58,7 +58,7 @@ export async function subscribePageToWebhook(
         `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
         {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 access_token: pageAccessToken,
             }),
@@ -71,10 +71,10 @@ export async function subscribePageToWebhook(
 
 
 export async function getUserPages(userAccessToken: string) {
-    const {data} = await axios.get(
+    const { data } = await axios.get(
         "https://graph.facebook.com/v19.0/me/accounts",
         {
-            params: {access_token: userAccessToken},
+            params: { access_token: userAccessToken },
         }
     );
 
@@ -87,15 +87,22 @@ export async function sendMessage(
     recipientId: string,
     text: string
 ): Promise<void> {
-    await fetch(
+    const response = await fetch(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
         {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                recipient: {id: recipientId},
-                message: {text},
+                recipient: { id: recipientId },
+                message: { text },
             }),
         }
     );
+
+    const data = await response.json() as any;
+    if (!response.ok) {
+        console.error("❌ Facebook API Error:", data.error || data);
+    } else {
+        console.log("✅ Message sent to Facebook:", recipientId);
+    }
 }
