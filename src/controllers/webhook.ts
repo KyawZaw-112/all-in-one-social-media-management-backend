@@ -38,6 +38,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .eq("page_id", pageId)
             .single();
 
+        console.log("Found connection:", connection);
+        console.log("Page ID from webhook:", pageId);
+
         if (!connection) return res.sendStatus(200);
 
         const merchantId = connection.merchant_id;
