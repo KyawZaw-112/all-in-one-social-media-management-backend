@@ -16,11 +16,32 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
             .maybeSingle();
 
         if (error || !merchant) {
-            console.error("❌ Subscription Check Failed:", { userId, error, merchantFound: !!merchant });
-            return res.status(403).json({
-                error: "လုပ်ငန်းမှတ်တမ်း မတွေ့ရှိပါ။ ကျေးဇူးပြု၍ အကောင့်ပြန်ဝင်ပါ။",
-                details: `User ID: ${userId}`
-            });
+            console.log("⚠️ Merchant profile missing for User ID:", userId, "- Creating default profile...");
+
+            // Auto-create merchant profile if missing (Self-healing)
+            const { data: newMerchant, error: createError } = await supabaseAdmin
+                .from("merchants")
+                .insert({
+                    id: userId,
+                    business_name: "My Business",
+                    subscription_plan: "shop",
+                    subscription_status: "active",
+                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                })
+                .select("id, subscription_status, trial_ends_at, subscription_plan")
+                .single();
+
+            if (createError || !newMerchant) {
+                console.error("❌ Failed to auto-create merchant:", createError);
+                return res.status(403).json({
+                    error: "Merchant profile missing and creation failed. Please contact support.",
+                    details: createError?.message
+                });
+            }
+
+            // Use the new merchant
+            req.merchant = newMerchant;
+            return next();
         }
 
         // 2. Check Trial expiry
@@ -43,7 +64,7 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                 await supabaseAdmin
                     .from("merchants")
                     .update({ subscription_status: 'expired' })
-                    .eq("user_id", userId);
+                    .eq("id", userId); // Fixed: user_id -> id
 
                 return res.status(402).json({
                     error: "Subscription expired",
