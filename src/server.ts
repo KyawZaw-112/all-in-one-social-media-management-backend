@@ -19,7 +19,10 @@ import conversationsRoutes from "./routes/conversations.routes.js";
 import { env } from "./config/env.js";
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    origin: env.FRONTEND_URL,
+    credentials: true,
+}));
 app.use(express.json());
 
 // Health check endpoint

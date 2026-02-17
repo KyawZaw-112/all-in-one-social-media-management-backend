@@ -1,5 +1,5 @@
-import { Router } from "express";
-import { supabaseAdmin } from "../supabaseAdmin.js";
+import {Router} from "express";
+import {supabaseAdmin} from "../supabaseAdmin.js";
 
 const router = Router();
 
@@ -8,13 +8,13 @@ const router = Router();
 ================================ */
 router.get("/", async (req, res) => {
     try {
-        const { data, error } = await supabaseAdmin
+        const {data, error} = await supabaseAdmin
             .from("conversations")
             .select(`
         *,
         automation_flows ( name )
       `)
-            .order("created_at", { ascending: false });
+            .order("created_at", {ascending: false});
 
         if (error) throw error;
 
@@ -26,7 +26,7 @@ router.get("/", async (req, res) => {
         res.json(formatted);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch conversations" });
+        res.status(500).json({error: "Failed to fetch conversations"});
     }
 });
 
@@ -35,9 +35,9 @@ router.get("/", async (req, res) => {
 ================================ */
 router.get("/:id", async (req, res) => {
     try {
-        const { id } = req.params;
+        const {id} = req.params;
 
-        const { data: conversation, error } = await supabaseAdmin
+        const {data: conversation, error} = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("id", id)
@@ -45,11 +45,11 @@ router.get("/:id", async (req, res) => {
 
         if (error) throw error;
 
-        const { data: messages } = await supabaseAdmin
+        const {data: messages} = await supabaseAdmin
             .from("messages")
             .select("*")
             .eq("conversation_id", id)
-            .order("created_at", { ascending: true });
+            .order("created_at", {ascending: true});
 
         res.json({
             conversation,
@@ -57,7 +57,7 @@ router.get("/:id", async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch detail" });
+        res.status(500).json({error: "Failed to fetch detail"});
     }
 });
 
@@ -66,17 +66,17 @@ router.get("/:id", async (req, res) => {
 ================================ */
 router.post("/:id/close", async (req, res) => {
     try {
-        const { id } = req.params;
+        const {id} = req.params;
 
         await supabaseAdmin
             .from("conversations")
-            .update({ status: "completed" })
+            .update({status: "completed"})
             .eq("id", id);
 
-        res.json({ success: true });
+        res.json({success: true});
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to close" });
+        res.status(500).json({error: "Failed to close"});
     }
 });
 
