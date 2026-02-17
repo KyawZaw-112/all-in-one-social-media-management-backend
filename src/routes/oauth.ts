@@ -201,7 +201,7 @@ router.post("/register", async (req, res) => {
         if (!authData.user) throw new Error("User creation failed");
 
         await supabaseAdmin.from("merchants").insert({
-            user_id: authData.user.id,
+            id: authData.user.id, // Fixed: use 'id' as discovery in schema check
             business_name: `${name}'s Business`,
             subscription_plan: subscription_plan || 'shop',
             trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -237,12 +237,12 @@ router.post("/login", async (req, res) => {
         if (error) throw error;
         res.json({
             success: true,
-            token: data.session.access_token,
+            token: data.session?.access_token,
             user: data.user,
             message: "Login successful! 👋"
         });
     } catch (error: any) {
-        res.status(401).json({ error: "Invalid email or password" });
+        res.status(401).json({ error: error.message || "Invalid email or password" });
     }
 });
 
