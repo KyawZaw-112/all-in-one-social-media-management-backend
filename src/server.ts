@@ -15,6 +15,7 @@ import webhookRoutes from "./routes/webhook.js";
 import rulesRoutes from "./routes/rules.route.js";
 import statRouter from "./routes/stats.js";
 import conversationsRoutes from "./routes/conversations.routes.js";
+import automationRoutes from "./routes/automation.js";
 
 import { env } from "./config/env.js";
 const app = express();
@@ -31,7 +32,7 @@ app.get("/health", (req, res) => {
 });
 
 import logLoginRouter from "./routes/log-login.js";
-app.use("/stats",statRouter)
+app.use("/stats", statRouter)
 app.use("/api/log-login", logLoginRouter);
 app.use("/api/conversations", conversationsRoutes);
 app.use("/webhook", webhookRoutes);
@@ -43,7 +44,8 @@ app.use("/platforms", platforms);
 app.use("/admin", adminRoutes);
 app.use("/admin/users", adminUsersRoutes);
 app.use("/admin/payments", adminPayments);
-app.use("/dashboard/auto-reply",autoReplyRoutes)
+app.use("/dashboard/auto-reply", autoReplyRoutes);
+app.use("/api/automation", automationRoutes);
 app.get("/", (req, res) => {
     res.send("Welcome to the API");
 })
