@@ -1,33 +1,62 @@
 import express from "express";
 import axios from "axios";
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 const router = express.Router();
+async function subscribePageToWebhook(pageId, pageAccessToken) {
+    try {
+        const response = await axios.post(`https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`, {}, {
+            params: {
+                access_token: pageAccessToken,
+            },
+        });
+        console.log("Subscribed:", pageId, response.data);
+    }
+    catch (err) {
+        console.error("Subscription error:", err.response?.data || err.message);
+    }
+}
+router.get("/", requireAuth, async (req, res) => {
+    const userId = req.user.id;
+    const { data, error } = await supabaseAdmin
+        .from("platform_connections")
+        .select("page_id, page_name")
+        .eq("user_id", userId)
+        .eq("platform", "facebook");
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+    res.json(data?.map((p) => ({
+        id: p.page_id,
+        name: p.page_name,
+        ruleCount: 0,
+    })));
+});
 /**
  * STEP 1: Redirect user to Facebook OAuth
  * GET /api/oauth/facebook
  */
-router.get("/facebook", (req, res) => {
+router.get("/facebook", async (req, res) => {
+    const userId = req.query.userId; // frontend ကပို့မယ်
     const params = new URLSearchParams({
-        client_id: `${process.env.FACEBOOK_APP_ID}`,
-        redirect_uri: `${process.env.FACEBOOK_REDIRECT_URI}`,
+        client_id: process.env.FACEBOOK_APP_ID,
+        redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
         response_type: "code",
-        scope: "pages_show_list,pages_messaging,pages_manage_metadata",
+        scope: "pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging\n",
+        state: userId, // 🔥 user id store
+        auth_type: "rerequest", // 🔥 always ask for permissions
     });
-    const facebookUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
-    return res.redirect(facebookUrl);
+    res.redirect(`https://www.facebook.com/v19.0/dialog/oauth?${params}`);
 });
 /**
  * STEP 2: Facebook Callback
- * GET /api/oauth/facebook/callback
+ * GET /oauth/facebook/callback
  */
 router.get("/facebook/callback", async (req, res) => {
-    const { code, state } = req.query;
-    if (!code) {
-        return res.status(400).json({ error: "No code received" });
-    }
     try {
-        // 1️⃣ Exchange code for USER access token
-        const tokenResponse = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
+        const { code, state } = req.query;
+        const userId = state;
+        const tokenRes = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
             params: {
                 client_id: process.env.FACEBOOK_APP_ID,
                 client_secret: process.env.FACEBOOK_APP_SECRET,
@@ -35,38 +64,69 @@ router.get("/facebook/callback", async (req, res) => {
                 code,
             },
         });
-        const userAccessToken = tokenResponse.data.access_token;
-        // 2️⃣ Get user's pages
-        const pagesResponse = await axios.get("https://graph.facebook.com/v19.0/me/accounts", {
-            params: {
-                access_token: userAccessToken,
-            },
-        });
-        const pages = pagesResponse.data.data;
-        if (!pages || pages.length === 0) {
-            return res.status(400).json({ error: "No pages found" });
+        const userAccessToken = tokenRes.data.access_token;
+        const pagesRes = await axios.get("https://graph.facebook.com/v19.0/me/accounts", { params: { access_token: userAccessToken } });
+        for (const page of pagesRes.data.data) {
+            const { error } = await supabaseAdmin
+                .from("platform_connections")
+                .upsert({
+                user_id: userId,
+                platform: "facebook", // 🔥 THIS WAS MISSING
+                page_id: page.id,
+                page_name: page.name,
+                page_access_token: page.access_token,
+            }, { onConflict: "user_id,page_id" });
+            if (error) {
+                console.error("Insert error:", error);
+            }
+            const { data: existingMerchant } = await supabaseAdmin
+                .from("merchants")
+                .select("id")
+                .eq("page_id", page.id)
+                .maybeSingle();
+            if (!existingMerchant) {
+                const { error: merchantError } = await supabaseAdmin
+                    .from("merchants")
+                    .insert({
+                    user_id: userId,
+                    page_id: page.id,
+                    business_name: page.name,
+                    business_type: "shop", //default value, can be updated later
+                });
+                if (merchantError) {
+                    console.error("Merchant insert error:", merchantError);
+                }
+            }
+            // 🔥 SUBSCRIBE PAGE TO WEBHOOK (THIS IS THE MISSING PART)
+            await subscribePageToWebhook(page.id, page.access_token);
         }
-        // Example: save first page (later you can let user choose)
-        const page = pages[0];
-        const { data, error } = await supabaseAdmin
-            .from("platform_connections")
-            .upsert({
-            user_id: state,
-            platform: "facebook",
-            page_id: page.id,
-            page_name: page.name,
-            page_access_token: page.access_token,
-            connected: true,
-        }, { onConflict: "user_id,page_id" });
-        console.log("INSERT RESULT:", data);
-        console.log("INSERT ERROR:", error);
-        console.log("PAGE DATA:", page);
-        console.log("State", state);
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
+        console.log("User ID:", userId);
+        console.log("Pages Response:", JSON.stringify(pagesRes.data, null, 2));
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
     }
     catch (error) {
         console.error(error.response?.data || error.message);
-        return res.status(500).json({ error: "Facebook connection failed" });
+        res.status(500).json({ error: "OAuth failed" });
+    }
+});
+// DELETE /api/platforms/:pageId
+router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { pageId } = req.params;
+        const { error } = await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("user_id", userId)
+            .eq("page_id", pageId)
+            .eq("platform", "facebook");
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: "Disconnect failed" });
     }
 });
 export default router;

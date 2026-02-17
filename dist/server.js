@@ -1,7 +1,6 @@
 // src/server.ts
 // IMPORTANT: Load env FIRST before any other imports
 import "./env.js";
-console.log("OAuth Routes:", oauthRoutes);
 import express from "express";
 import cors from "cors";
 import oauthRoutes from "./routes/oauth.js";
@@ -14,15 +13,23 @@ import adminUsersRoutes from "./routes/admin.users.routes.js";
 import autoReplyRoutes from './routes/autoReply.js';
 import webhookRoutes from "./routes/webhook.js";
 import rulesRoutes from "./routes/rules.route.js";
+import statRouter from "./routes/stats.js";
+import conversationsRoutes from "./routes/conversations.routes.js";
+import { env } from "./config/env.js";
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: env.FRONTEND_URL,
+    credentials: true,
+}));
 app.use(express.json());
 // Health check endpoint
 app.get("/health", (req, res) => {
     res.json({ status: "ok", message: "Backend is running" });
 });
 import logLoginRouter from "./routes/log-login.js";
+app.use("/stats", statRouter);
 app.use("/api/log-login", logLoginRouter);
+app.use("/api/conversations", conversationsRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/rules", rulesRoutes);
 app.use("/api/oauth", oauthRoutes);

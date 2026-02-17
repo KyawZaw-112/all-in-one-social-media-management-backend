@@ -11,6 +11,22 @@ export function getFacebookAuthUrl(userId) {
     });
     return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
 }
+export async function sendImageMessage(pageId, pageAccessToken, recipientId, imageUrl) {
+    await axios.post(`https://graph.facebook.com/v19.0/me/messages`, {
+        recipient: { id: recipientId },
+        message: {
+            attachment: {
+                type: "image",
+                payload: {
+                    url: imageUrl,
+                    is_reusable: true
+                }
+            }
+        }
+    }, {
+        params: { access_token: pageAccessToken }
+    });
+}
 export async function exchangeCodeForToken(code) {
     const { data } = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
         params: {
@@ -21,6 +37,17 @@ export async function exchangeCodeForToken(code) {
         },
     });
     return data;
+}
+export async function subscribePageToWebhook(pageId, pageAccessToken) {
+    const response = await fetch(`https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            access_token: pageAccessToken,
+        }),
+    });
+    const data = await response.json();
+    console.log("Subscribe response:", data);
 }
 export async function getUserPages(userAccessToken) {
     const { data } = await axios.get("https://graph.facebook.com/v19.0/me/accounts", {

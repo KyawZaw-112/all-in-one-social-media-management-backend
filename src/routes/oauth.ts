@@ -45,7 +45,7 @@ router.get("/", requireAuth, async (req, res) => {
     }
 
     res.json(
-        data.map((p) => ({
+        data?.map((p) => ({
             id: p.page_id,
             name: p.page_name,
             ruleCount: 0,
