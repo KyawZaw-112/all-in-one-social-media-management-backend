@@ -1,41 +1,41 @@
-import {Router} from "express";
-import {requireAuth} from "../middleware/requireAuth.js";
-import {supabaseAdmin} from "../supabaseAdmin.js";
-import {getFacebookAuthUrl} from "../services/facebook.services.js";
+import { Router } from "express";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
+import { getFacebookAuthUrl, subscribePageToWebhook } from "../services/facebook.services.js";
 
 const router = Router();
 
-/**
- * GET /platforms
- * Return connected Facebook pages
- */
-router.get("/", requireAuth, async (req: any, res) => {
-    const { data, error } = await supabaseAdmin
-        .from("platform_connections")
-        .select("id, page_id, page_name, platform")
-        .eq("user_id", req.user.id)
-        .eq("platform", "facebook");
-
-    if (error) {
-        return res.status(400).json({ error: error.message });
-    }
-
-    res.json(data || []);
-});
-
+// ... (existing routes)
 
 /**
- * POST /platforms/connect
+ * POST /platforms/:pageId/sync
+ * Manually re-subscribe a page to webhooks
  */
-router.post("/connect", requireAuth, async (req: any, res) => {
-    const {platform} = req.body;
+router.post("/:pageId/sync", requireAuth, async (req: any, res) => {
+    try {
+        const { pageId } = req.params;
+        const userId = req.user.id;
 
-    if (platform === "facebook") {
-        const url = getFacebookAuthUrl(req.user.id);
-        return res.json({url});
+        // Get token from db
+        const { data: connection, error } = await supabaseAdmin
+            .from("platform_connections")
+            .select("page_access_token, page_name")
+            .eq("user_id", userId)
+            .eq("page_id", pageId)
+            .maybeSingle();
+
+        if (error || !connection) {
+            return res.status(404).json({ error: "Connection not found" });
+        }
+
+        console.log(`🔄 Syncing Page: ${connection.page_name} (${pageId})`);
+        await subscribePageToWebhook(pageId, connection.page_access_token);
+
+        res.json({ success: true, message: `Page "${connection.page_name}" synced successfully` });
+    } catch (err: any) {
+        console.error("Sync error:", err.message);
+        res.status(500).json({ error: "Failed to sync page" });
     }
-
-    res.status(400).json({error: "Unsupported platform"});
 });
 
 export default router;

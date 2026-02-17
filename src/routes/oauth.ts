@@ -1,34 +1,10 @@
 import express from "express";
-import axios, { AxiosError } from "axios";
-import { env } from "../config/env.js";
+import axios from "axios";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { subscribePageToWebhook } from "../services/facebook.services.js";
 
 const router = express.Router();
-
-async function subscribePageToWebhook(
-    pageId: string,
-    pageAccessToken: string
-) {
-    try {
-        const response = await axios.post(
-            `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
-            {},
-            {
-                params: {
-                    access_token: pageAccessToken,
-                },
-            }
-        );
-
-        console.log("Subscribed:", pageId, response.data);
-    } catch (err: any) {
-        console.error(
-            "Subscription error:",
-            err.response?.data || err.message
-        );
-    }
-}
 
 
 router.get("/", requireAuth, async (req, res) => {
