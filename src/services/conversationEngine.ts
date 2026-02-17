@@ -126,11 +126,16 @@ export async function runConversationEngine(
     messageText: string,
     flow: any
 ) {
-    // Save user message
+    // Save user message - MATCH PRODUCTION SCHEMA
     await supabaseAdmin.from("messages").insert({
-        conversation_id: conversation.id,
-        role: "user",
-        content: messageText,
+        user_id: flow.merchant_id || conversation.merchant_id,
+        sender_id: conversation.user_psid, // 👈 REQUIRED & VERIFIED
+        sender_email: conversation.user_psid,
+        sender_name: "Facebook User",
+        body: messageText,
+        channel: "facebook",
+        status: "received",
+        created_at: new Date().toISOString(),
     });
 
     // Get conversation data
@@ -234,11 +239,16 @@ export async function runConversationEngine(
         }
     }
 
-    // Save assistant reply
+    // Save assistant reply - MATCH PRODUCTION SCHEMA
     await supabaseAdmin.from("messages").insert({
-        conversation_id: conversation.id,
-        role: "assistant",
-        content: reply,
+        user_id: flow.merchant_id || conversation.merchant_id,
+        sender_id: flow.merchant_id || conversation.merchant_id, // 👈 REQUIRED
+        sender_email: "AI-Assistant",
+        sender_name: "Auto-Reply Bot",
+        body: reply,
+        channel: "facebook",
+        status: "replied",
+        created_at: new Date().toISOString(),
     });
 
     return {
