@@ -230,7 +230,15 @@ router.get("/stats", async (req, res) => {
             .select("status")
             .eq("merchant_id", userId);
 
+        // Get merchant details for business_type
+        const { data: merchant } = await supabaseAdmin
+            .from("merchants")
+            .select("business_type, subscription_plan")
+            .eq("id", userId)
+            .single();
+
         const stats = {
+            business_type: merchant?.business_type || merchant?.subscription_plan || 'shop',
             total_flows: flows?.length || 0,
             active_flows: flows?.filter((f) => f.is_active).length || 0,
             inactive_flows: flows?.filter((f) => !f.is_active).length || 0,
