@@ -1,8 +1,8 @@
 import express from "express";
-import axios, {AxiosError} from "axios";
-import {env} from "../config/env.js";
-import {supabaseAdmin} from "../supabaseAdmin.js";
-import {requireAuth} from "../middleware/requireAuth.js";
+import axios, { AxiosError } from "axios";
+import { env } from "../config/env.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
@@ -34,14 +34,14 @@ async function subscribePageToWebhook(
 router.get("/", requireAuth, async (req, res) => {
     const userId = req.user.id;
 
-    const {data, error} = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
         .from("platform_connections")
         .select("page_id, page_name")
         .eq("user_id", userId)
         .eq("platform", "facebook");
 
     if (error) {
-        return res.status(500).json({error: error.message});
+        return res.status(500).json({ error: error.message });
     }
 
     res.json(
@@ -80,7 +80,7 @@ router.get("/facebook", async (req, res) => {
  */
 router.get("/facebook/callback", async (req, res) => {
     try {
-        const {code, state} = req.query;
+        const { code, state } = req.query;
 
         const userId = state as string;
 
@@ -100,11 +100,11 @@ router.get("/facebook/callback", async (req, res) => {
 
         const pagesRes = await axios.get(
             "https://graph.facebook.com/v19.0/me/accounts",
-            {params: {access_token: userAccessToken}}
+            { params: { access_token: userAccessToken } }
         );
 
         for (const page of pagesRes.data.data) {
-            const {error} = await supabaseAdmin
+            const { error } = await supabaseAdmin
                 .from("platform_connections")
                 .upsert(
                     {
@@ -114,21 +114,21 @@ router.get("/facebook/callback", async (req, res) => {
                         page_name: page.name,
                         page_access_token: page.access_token,
                     },
-                    {onConflict: "user_id,page_id"}
+                    { onConflict: "user_id,page_id" }
                 );
 
             if (error) {
                 console.error("Insert error:", error);
             }
 
-            const {data: existingMerchant} = await supabaseAdmin
+            const { data: existingMerchant } = await supabaseAdmin
                 .from("merchants")
                 .select("id")
                 .eq("page_id", page.id)
                 .maybeSingle()
 
             if (!existingMerchant) {
-                const {error: merchantError} = await supabaseAdmin
+                const { error: merchantError } = await supabaseAdmin
                     .from("merchants")
                     .insert({
                         user_id: userId,
@@ -152,7 +152,7 @@ router.get("/facebook/callback", async (req, res) => {
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
     } catch (error: any) {
         console.error(error.response?.data || error.message);
-        res.status(500).json({error: "OAuth failed"});
+        res.status(500).json({ error: "OAuth failed" });
     }
 });
 
@@ -160,9 +160,9 @@ router.get("/facebook/callback", async (req, res) => {
 router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
-        const {pageId} = req.params;
+        const { pageId } = req.params;
 
-        const {error} = await supabaseAdmin
+        const { error } = await supabaseAdmin
             .from("platform_connections")
             .delete()
             .eq("user_id", userId)
@@ -170,14 +170,80 @@ router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
             .eq("platform", "facebook");
 
         if (error) {
-            return res.status(500).json({error: error.message});
+            return res.status(500).json({ error: error.message });
         }
 
-        res.json({success: true});
+        res.json({ success: true });
     } catch (err) {
-        res.status(500).json({error: "Disconnect failed"});
+        res.status(500).json({ error: "Disconnect failed" });
     }
 });
 
+/**
+ * SaaS Registration
+ * POST /api/oauth/register
+ */
+router.post("/register", async (req, res) => {
+    try {
+        const { name, email, password, subscription_plan, trial_ends_at } = req.body;
+
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: "Name, email and password are required" });
+        }
+
+        const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+            email,
+            password,
+            options: { data: { full_name: name } }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("User creation failed");
+
+        await supabaseAdmin.from("merchants").insert({
+            user_id: authData.user.id,
+            business_name: `${name}'s Business`,
+            subscription_plan: subscription_plan || 'shop',
+            trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            subscription_status: 'active'
+        });
+
+        const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (sessionError) throw sessionError;
+
+        res.status(201).json({
+            success: true,
+            token: sessionData.session.access_token,
+            user: sessionData.user,
+            message: "Registration successful! Welcome! 🚀"
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * SaaS Login
+ * POST /api/oauth/login
+ */
+router.post("/login", async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        res.json({
+            success: true,
+            token: data.session.access_token,
+            user: data.user,
+            message: "Login successful! 👋"
+        });
+    } catch (error: any) {
+        res.status(401).json({ error: "Invalid email or password" });
+    }
+});
 
 export default router;

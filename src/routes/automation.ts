@@ -1,11 +1,16 @@
 import { Router } from "express";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 
 const router = Router();
 
+// Apply both Auth and Subscription check to all flow routes
+router.use(requireAuth);
+router.use(requireActiveSubscription);
+
 // Get all flows for the authenticated user
-router.get("/flows", requireAuth, async (req, res) => {
+router.get("/flows", async (req, res) => {
     try {
         const userId = req.user?.id;
 
@@ -28,7 +33,7 @@ router.get("/flows", requireAuth, async (req, res) => {
 });
 
 // Get single flow
-router.get("/flows/:id", requireAuth, async (req, res) => {
+router.get("/flows/:id", async (req, res) => {
     try {
         const userId = req.user?.id;
         const { id } = req.params;
@@ -56,7 +61,7 @@ router.get("/flows/:id", requireAuth, async (req, res) => {
 });
 
 // Create new flow
-router.post("/flows", requireAuth, async (req, res) => {
+router.post("/flows", async (req, res) => {
     try {
         const userId = req.user?.id;
         const {
@@ -118,7 +123,7 @@ router.post("/flows", requireAuth, async (req, res) => {
 });
 
 // Update flow
-router.put("/flows/:id", requireAuth, async (req, res) => {
+router.put("/flows/:id", async (req, res) => {
     try {
         const userId = req.user?.id;
         const { id } = req.params;
@@ -176,7 +181,7 @@ router.put("/flows/:id", requireAuth, async (req, res) => {
 });
 
 // Delete flow
-router.delete("/flows/:id", requireAuth, async (req, res) => {
+router.delete("/flows/:id", async (req, res) => {
     try {
         const userId = req.user?.id;
         const { id } = req.params;
@@ -209,7 +214,7 @@ router.delete("/flows/:id", requireAuth, async (req, res) => {
 });
 
 // Get flow statistics
-router.get("/stats", requireAuth, async (req, res) => {
+router.get("/stats", async (req, res) => {
     try {
         const userId = req.user?.id;
 
