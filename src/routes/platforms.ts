@@ -5,7 +5,63 @@ import { getFacebookAuthUrl, subscribePageToWebhook } from "../services/facebook
 
 const router = Router();
 
-// ... (existing routes)
+/**
+ * GET /api/platforms
+ * Get all connected platforms for the user
+ */
+router.get("/", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { data, error } = await supabaseAdmin
+            .from("platform_connections")
+            .select("page_id, page_name, platform")
+            .eq("user_id", userId);
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (err: any) {
+        console.error("Fetch platforms error:", err.message);
+        res.status(500).json({ error: "Failed to fetch platforms" });
+    }
+});
+
+/**
+ * POST /api/platforms/connect
+ * Get the Facebook Auth URL
+ */
+router.post("/connect", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const url = getFacebookAuthUrl(userId);
+        res.json({ url });
+    } catch (err: any) {
+        console.error("Connect error:", err.message);
+        res.status(500).json({ error: "Failed to generate auth URL" });
+    }
+});
+
+/**
+ * DELETE /api/platforms/:pageId
+ * Disconnect a page
+ */
+router.delete("/:pageId", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { pageId } = req.params;
+
+        const { error } = await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("user_id", userId)
+            .eq("page_id", pageId);
+
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error("Disconnect error:", err.message);
+        res.status(500).json({ error: "Failed to disconnect platform" });
+    }
+});
 
 /**
  * POST /platforms/:pageId/sync
