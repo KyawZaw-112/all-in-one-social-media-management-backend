@@ -18,6 +18,8 @@ export const verifyWebhook = (req: Request, res: Response) => {
 };
 
 export const handleWebhook = async (req: Request, res: Response) => {
+    console.log("Webhook received:");
+    console.log(JSON.stringify(req.body, null, 2));
     try {
         const pageId = req.body.entry?.[0]?.id;
         const senderId =
