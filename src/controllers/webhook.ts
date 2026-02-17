@@ -79,12 +79,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
             }
 
             flow = matchedFlow;
-
+            console.log("Page ID inserting",pageId)
             const { data: newConversation, error: insertError } =
                 await supabaseAdmin
                     .from("conversations")
                     .insert({
                         merchant_id: merchantId,
+                        page_id: pageId,          // 👈 ADD THIS
                         user_psid: senderId,
                         flow_id: flow.id,
                         temp_data: {},
