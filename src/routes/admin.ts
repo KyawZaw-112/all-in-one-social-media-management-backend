@@ -135,4 +135,53 @@ router.put("/merchants/:id/subscription", async (req, res) => {
     }
 });
 
+/**
+ * Create New Merchant (User)
+ * POST /api/admin/merchants
+ */
+router.post("/merchants", async (req, res) => {
+    try {
+        const { email, password, name, role = "user", plan = "shop" } = req.body;
+
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: "Name, email and password are required" });
+        }
+
+        /* 1️⃣ Create User in Supabase Auth */
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { full_name: name, role: role }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("User creation failed");
+
+        /* 2️⃣ Add to merchants table */
+        const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
+            id: authData.user.id,
+            business_name: `${name}'s Business`,
+            subscription_plan: plan,
+            trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            subscription_status: 'active'
+        });
+
+        if (merchantError) {
+            // Note: In a real app, delete the auth user if merchant creation fails
+            console.error("Merchant profile creation failed:", merchantError);
+            return res.status(500).json({ error: "User created but profile setup failed: " + merchantError.message });
+        }
+
+        res.status(201).json({
+            success: true,
+            user: authData.user,
+            message: "User created successfully! 🚀"
+        });
+
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
