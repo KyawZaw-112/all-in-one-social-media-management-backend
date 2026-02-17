@@ -57,29 +57,44 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         // 3️⃣ If no conversation → match trigger
         if (!conversation) {
-            const { data: matchedFlow } = await supabaseAdmin
+            const { data: matchedFlow,error:errorFlow } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
                 .eq("merchant_id", merchantId)
-                .eq("trigger_keyword", messageText)
+                .eq("trigger_keyword", messageText.trim())
                 .eq("is_active", true)
-                .single();
+                .maybeSingle();
 
-            if (!matchedFlow) return res.sendStatus(200);
+            if (errorFlow) {
+                console.log("Error fetching flow:", errorFlow);
+                return res.sendStatus(200);
+            }
+
+            if (!matchedFlow) {
+                console.log("No flow matched for message:", messageText);
+                return res.sendStatus(200);
+            }
 
             flow = matchedFlow;
 
-            const { data: newConversation } = await supabaseAdmin
-                .from("conversations")
-                .insert({
-                    merchant_id: merchantId,
-                    user_psid: senderId,
-                    flow_id: flow.id,
-                    temp_data: {},
-                    status: "active",
-                })
-                .select()
-                .single();
+            const { data: newConversation, error: insertError } =
+                await supabaseAdmin
+                    .from("conversations")
+                    .insert({
+                        merchant_id: merchantId,
+                        user_psid: senderId,
+                        flow_id: flow.id,
+                        temp_data: {},
+                        status: "active",
+                    })
+                    .select()
+                    .single();
+
+            if (insertError) {
+                console.log("Insert conversation error:", insertError);
+                return res.sendStatus(200);
+            }
+
 
             conversation = newConversation;
         } else {

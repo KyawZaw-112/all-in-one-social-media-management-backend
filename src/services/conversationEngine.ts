@@ -37,7 +37,7 @@ Extract:
 - address
 - phone
 
-Return strict JSON:
+Return strict JSON:္
 {
   "reply": "...",
   "data": {},
