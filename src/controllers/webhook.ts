@@ -50,7 +50,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .from("conversations")
             .select("*")
             .eq("merchant_id", merchantId)
-            .eq("user_psid", senderId)
+            .eq("user_id", senderId)
             .eq("status", "active")
             .maybeSingle();
 
