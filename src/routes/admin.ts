@@ -53,6 +53,35 @@ router.get("/system-stats", async (req, res) => {
             .from("messages")
             .select("*", { count: 'exact', head: true });
 
+        // 4. Payment Stats (Pending & Revenue)
+        const { data: payments } = await supabaseAdmin
+            .from("payments")
+            .select("amount, status, created_at");
+
+        const pendingPayments = payments?.filter(p => p.status === 'pending').length || 0;
+
+        const currentMonth = new Date().getMonth();
+        const monthlyRevenue = payments
+            ?.filter(p => p.status === 'approved' && new Date(p.created_at).getMonth() === currentMonth)
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+
+        // 5. Chart Data (Last 7 Days User Growth)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const chartData = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const joyDateString = d.toISOString().split('T')[0];
+
+            const count = merchants.filter(m => m.created_at.startsWith(joyDateString)).length;
+            chartData.unshift({
+                date: d.toLocaleDateString('en-US', { weekday: 'short' }),
+                users: count
+            });
+        }
+
         // Calculate Stats
         const stats = {
             totalUsers: merchants.length,
@@ -62,11 +91,13 @@ router.get("/system-stats", async (req, res) => {
                 shop: merchants.filter(m => m.subscription_plan === 'shop').length,
                 cargo: merchants.filter(m => m.subscription_plan === 'cargo').length,
             },
-            estimatedMonthlyRevenue: (merchants.filter(m => m.subscription_status === 'active').length * 2000),
+            monthlyRevenue: monthlyRevenue,
+            pendingPayments: pendingPayments,
             systemHealth: {
                 fbPages: totalPages || 0,
                 messagesProcessed: totalMessages || 0,
-            }
+            },
+            chartData: chartData
         };
 
         res.json({ success: true, data: stats });
