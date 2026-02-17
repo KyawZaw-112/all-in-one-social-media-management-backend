@@ -1,8 +1,8 @@
-import {runRuleEngine} from "../services/ruleEngine.js";
-import {sendMessage} from "../services/facebook.services.js";
-import {supabaseAdmin} from "../supabaseAdmin.js";
-import {Request, Response} from "express";
-import {runConversationEngine} from "../services/conversationEngine.js";
+import { sendMessage } from "../services/facebook.services.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
+import { Request, Response } from "express";
+import { runConversationEngine } from "../services/conversationEngine.js";
+
 export const verifyWebhook = (req: Request, res: Response) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
 
@@ -16,143 +16,115 @@ export const verifyWebhook = (req: Request, res: Response) => {
 
     return res.sendStatus(403);
 };
+
 export const handleWebhook = async (req: Request, res: Response) => {
-    const body = req.body;
-
-    if (body.object !== "page") {
-        return res.sendStatus(404);
-    }
-
     try {
-        for (const entry of body.entry) {
-            const pageId = String(entry.id);
+        const pageId = req.body.entry?.[0]?.id;
+        const senderId =
+            req.body.entry?.[0]?.messaging?.[0]?.sender?.id;
+        const messageText =
+            req.body.entry?.[0]?.messaging?.[0]?.message?.text;
 
-            if (!entry.messaging) continue;
-
-            for (const event of entry.messaging) {
-                if (!event?.message?.text) continue;
-
-                const senderId = event.sender.id;
-                const messageText = event.message.text.trim();
-
-                // 1️⃣ Save incoming message
-                await supabaseAdmin.from("messages").insert({
-                    page_id: pageId,
-                    sender_id: senderId,
-                    body: messageText,
-                    direction: "incoming"
-                });
-
-                // 2️⃣ Get page access token
-                const { data: connection } = await supabaseAdmin
-                    .from("platform_connections")
-                    .select("page_access_token")
-                    .eq("page_id", pageId)
-                    .single();
-
-                if (!connection) continue;
-
-                // 3️⃣ Get merchant
-                const { data: merchant } = await supabaseAdmin
-                    .from("merchants")
-                    .select("*")
-                    .eq("page_id", pageId)
-                    .single();
-
-                if (!merchant) continue;
-
-                // 4️⃣ Get or create conversation
-                let { data: conversation } = await supabaseAdmin
-                    .from("conversations")
-                    .select("*")
-                    .eq("page_id", pageId)
-                    .eq("sender_id", senderId)
-                    .maybeSingle();
-
-                if (!conversation) {
-                    const { data: newConv } = await supabaseAdmin
-                        .from("conversations")
-                        .insert({
-                            page_id: pageId,
-                            sender_id: senderId,
-                            current_step: "ASK_PRODUCT"
-                        })
-                        .select()
-                        .single();
-
-                    conversation = newConv;
-                }
-
-                // 5️⃣ Run conversation engine
-                const result = await runConversationEngine(
-                    conversation,
-                    messageText,
-                    merchant
-                );
-
-                // 6️⃣ Update conversation
-                await supabaseAdmin
-                    .from("conversations")
-                    .update({
-                        current_step: result.nextStep,
-                        temp_data: {
-                            ...conversation.temp_data,
-                            ...result.save
-                        },
-                        updated_at: new Date()
-                    })
-                    .eq("id", conversation.id);
-
-                // 7️⃣ If DONE → create order
-                if (result.nextStep === "DONE") {
-
-                    const finalData = {
-                        ...conversation.temp_data,
-                        ...result.save
-                    };
-
-                    await supabaseAdmin.from("orders").insert({
-                        page_id: pageId,
-                        sender_id: senderId,
-                        product_id: finalData.product,
-                        qty: finalData.qty,
-                        address: finalData.address,
-                        order_status: "confirmed",
-                        payment_status:
-                            merchant.business_type === "cargo"
-                                ? "none"
-                                : "pending",
-                        shipping_status: "none"
-                    });
-
-                    await supabaseAdmin
-                        .from("conversations")
-                        .delete()
-                        .eq("id", conversation.id);
-                }
-
-                // 8️⃣ Send reply
-                await sendMessage(
-                    pageId,
-                    connection.page_access_token,
-                    senderId,
-                    result.reply
-                );
-
-                // Save outgoing
-                await supabaseAdmin.from("messages").insert({
-                    page_id: pageId,
-                    sender_id: senderId,
-                    body: result.reply,
-                    direction: "outgoing"
-                });
-            }
+        if (!pageId || !senderId || !messageText) {
+            return res.sendStatus(200);
         }
 
-        return res.sendStatus(200);
+        // 1️⃣ Find merchant connection
+        const { data: connection } = await supabaseAdmin
+            .from("platform_connections")
+            .select("*")
+            .eq("page_id", pageId)
+            .single();
 
-    } catch (err) {
-        console.error("Webhook error:", err);
+        if (!connection) return res.sendStatus(200);
+
+        const merchantId = connection.merchant_id;
+
+        // 2️⃣ Find existing active conversation
+        let { data: conversation } = await supabaseAdmin
+            .from("conversations")
+            .select("*")
+            .eq("merchant_id", merchantId)
+            .eq("user_psid", senderId)
+            .eq("status", "active")
+            .maybeSingle();
+
+        let flow;
+
+        // 3️⃣ If no conversation → match trigger
+        if (!conversation) {
+            const { data: matchedFlow } = await supabaseAdmin
+                .from("automation_flows")
+                .select("*")
+                .eq("merchant_id", merchantId)
+                .eq("trigger_keyword", messageText)
+                .eq("is_active", true)
+                .single();
+
+            if (!matchedFlow) return res.sendStatus(200);
+
+            flow = matchedFlow;
+
+            const { data: newConversation } = await supabaseAdmin
+                .from("conversations")
+                .insert({
+                    merchant_id: merchantId,
+                    user_psid: senderId,
+                    flow_id: flow.id,
+                    temp_data: {},
+                    status: "active",
+                })
+                .select()
+                .single();
+
+            conversation = newConversation;
+        } else {
+            const { data: existingFlow } = await supabaseAdmin
+                .from("automation_flows")
+                .select("*")
+                .eq("id", conversation.flow_id)
+                .single();
+
+            flow = existingFlow;
+        }
+
+        if (!conversation || !flow) {
+            return res.sendStatus(200);
+        }
+
+        // 4️⃣ Run AI conversation engine
+        const result = await runConversationEngine(
+            conversation,
+            messageText,
+            flow
+        );
+
+        // 5️⃣ Auto create order if completed
+        if (result.order_complete) {
+            await supabaseAdmin.from("orders").insert({
+                merchant_id: merchantId,
+                conversation_id: conversation.id,
+                ...result.temp_data,
+                status: "pending",
+            });
+
+            await supabaseAdmin
+                .from("conversations")
+                .update({ status: "completed" })
+                .eq("id", conversation.id);
+        }
+
+        // 6️⃣ Send reply to Messenger
+        await sendMessage(
+            pageId,
+            connection.page_access_token,
+            senderId,
+            result.reply
+        );
+
+        return res.sendStatus(200);
+    } catch (error) {
+        console.error("Webhook error:", error);
         return res.sendStatus(500);
     }
 };

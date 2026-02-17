@@ -14,6 +14,8 @@ import autoReplyRoutes from './routes/autoReply.js';
 import webhookRoutes from "./routes/webhook.js";
 import rulesRoutes from "./routes/rules.route.js";
 import statRouter from "./routes/stats.js";
+import conversationsRoutes from "./routes/conversations.routes.js";
+
 import { env } from "./config/env.js";
 const app = express();
 
@@ -28,6 +30,7 @@ app.get("/health", (req, res) => {
 import logLoginRouter from "./routes/log-login.js";
 app.use("/stats",statRouter)
 app.use("/api/log-login", logLoginRouter);
+app.use("/api/conversations", conversationsRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/rules", rulesRoutes);
 app.use("/api/oauth", oauthRoutes);

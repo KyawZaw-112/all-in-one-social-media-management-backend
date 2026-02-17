@@ -1,5 +1,5 @@
 import axios from "axios";
-import { env } from "../config/env.js";
+import {env} from "../config/env.js";
 import fetch from "node-fetch";
 
 export function getFacebookAuthUrl(userId: string) {
@@ -14,9 +14,28 @@ export function getFacebookAuthUrl(userId: string) {
     return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
 }
 
+export async function sendImageMessage(pageId: string, pageAccessToken: string, recipientId: string, imageUrl: string) {
+    await axios.post(`https://graph.facebook.com/v19.0/me/messages`,
+        {
+            recipient: {id: recipientId},
+            message: {
+                attachment: {
+                    type: "image",
+                    payload: {
+                        url: imageUrl,
+                        is_reusable: true
+                    }
+                }
+            }
+        },
+        {
+            params: {access_token: pageAccessToken}
+        }
+    )
+}
 
 export async function exchangeCodeForToken(code: string) {
-    const { data } = await axios.get(
+    const {data} = await axios.get(
         "https://graph.facebook.com/v19.0/oauth/access_token",
         {
             params: {
@@ -39,7 +58,7 @@ export async function subscribePageToWebhook(
         `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
         {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
                 access_token: pageAccessToken,
             }),
@@ -52,10 +71,10 @@ export async function subscribePageToWebhook(
 
 
 export async function getUserPages(userAccessToken: string) {
-    const { data } = await axios.get(
+    const {data} = await axios.get(
         "https://graph.facebook.com/v19.0/me/accounts",
         {
-            params: { access_token: userAccessToken },
+            params: {access_token: userAccessToken},
         }
     );
 
@@ -72,10 +91,10 @@ export async function sendMessage(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
         {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
-                recipient: { id: recipientId },
-                message: { text },
+                recipient: {id: recipientId},
+                message: {text},
             }),
         }
     );
