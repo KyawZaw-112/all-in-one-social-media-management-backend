@@ -34,14 +34,14 @@ async function subscribePageToWebhook(
 router.get("/", requireAuth, async (req, res) => {
     const userId = req.user.id;
 
-    const { data, error } = await supabaseAdmin
+    const {data, error} = await supabaseAdmin
         .from("platform_connections")
         .select("page_id, page_name")
         .eq("user_id", userId)
         .eq("platform", "facebook");
 
     if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({error: error.message});
     }
 
     res.json(
@@ -104,7 +104,7 @@ router.get("/facebook/callback", async (req, res) => {
         );
 
         for (const page of pagesRes.data.data) {
-            const { error } = await supabaseAdmin
+            const {error} = await supabaseAdmin
                 .from("platform_connections")
                 .upsert(
                     {
@@ -114,14 +114,36 @@ router.get("/facebook/callback", async (req, res) => {
                         page_name: page.name,
                         page_access_token: page.access_token,
                     },
-                    { onConflict: "user_id,page_id" }
+                    {onConflict: "user_id,page_id"}
                 );
 
             if (error) {
                 console.error("Insert error:", error);
             }
+
+            const {data: existingMerchant} = await supabaseAdmin
+                .from("merchants")
+                .select("id")
+                .eq("page_id", page.id)
+                .maybeSingle()
+
+            if (!existingMerchant) {
+                const {error: merchantError} = await supabaseAdmin
+                    .from("merchants")
+                    .insert({
+                        user_id: userId,
+                        page_id: page.id,
+                        business_name: page.name,
+                        business_type: "shop", //default value, can be updated later
+                    });
+
+                if (merchantError) {
+                    console.error("Merchant insert error:", merchantError);
+                }
+            }
             // 🔥 SUBSCRIBE PAGE TO WEBHOOK (THIS IS THE MISSING PART)
             await subscribePageToWebhook(page.id, page.access_token);
+
         }
 
         console.log("User ID:", userId);
@@ -138,9 +160,9 @@ router.get("/facebook/callback", async (req, res) => {
 router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
-        const { pageId } = req.params;
+        const {pageId} = req.params;
 
-        const { error } = await supabaseAdmin
+        const {error} = await supabaseAdmin
             .from("platform_connections")
             .delete()
             .eq("user_id", userId)
@@ -148,15 +170,14 @@ router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
             .eq("platform", "facebook");
 
         if (error) {
-            return res.status(500).json({ error: error.message });
+            return res.status(500).json({error: error.message});
         }
 
-        res.json({ success: true });
+        res.json({success: true});
     } catch (err) {
-        res.status(500).json({ error: "Disconnect failed" });
+        res.status(500).json({error: "Disconnect failed"});
     }
 });
-
 
 
 export default router;
