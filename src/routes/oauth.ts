@@ -149,7 +149,7 @@ router.get("/facebook/callback", async (req, res) => {
         console.log("User ID:", userId);
         console.log("Pages Response:", JSON.stringify(pagesRes.data, null, 2));
 
-        res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms`);
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     } catch (error: any) {
         console.error(error.response?.data || error.message);
         res.status(500).json({ error: "OAuth failed" });
