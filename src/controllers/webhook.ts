@@ -32,20 +32,24 @@ export const handleWebhook = async (req: Request, res: Response) => {
         }
 
         // 1️⃣ Find merchant connection
-        const { data: connection } = await supabaseAdmin
+        const { data: connection, error: connError } = await supabaseAdmin
             .from("platform_connections")
             .select("*")
             .eq("page_id", pageId)
-            .single();
+            .maybeSingle();
 
-        console.log("Found connection:", connection);
-        console.log("Page ID from webhook:", pageId);
+        console.log("🔍 Connection Search:", { pageId, found: !!connection, error: connError });
 
-        if (!connection) return res.sendStatus(200);
+        if (!connection) {
+            console.log("⚠️ No connection found for Page ID:", pageId);
+            return res.sendStatus(200);
+        }
 
-        const merchantId = connection.merchant_id;
+        // Fix: connection might use 'user_id' as saved in oauth.ts
+        const merchantId = connection.user_id || connection.merchant_id;
+        console.log("👤 Merchant identified:", merchantId);
 
-        let { data: conversation } = await supabaseAdmin
+        let { data: conversation, error: convError } = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("merchant_id", merchantId)
@@ -53,39 +57,42 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .eq("status", "active")
             .maybeSingle();
 
+        if (convError) console.error("❌ Conversation lookup error:", convError);
+
         let flow;
 
         // 3️⃣ If no conversation → match trigger
         if (!conversation) {
+            const keyword = messageText.toLowerCase().trim();
+            console.log("🆕 New conversation attempt. Keyword:", keyword);
+
             const { data: matchedFlow, error: errorFlow } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
                 .eq("merchant_id", merchantId)
-                .eq("trigger_keyword", messageText.trim())
+                .eq("trigger_keyword", keyword)
                 .eq("is_active", true)
                 .maybeSingle();
 
-
-            console.log("Flow Query Merchant ID:", merchantId);
-
             if (errorFlow) {
-                console.log("Error fetching flow:", errorFlow);
+                console.error("❌ Error fetching flow:", errorFlow);
                 return res.sendStatus(200);
             }
 
             if (!matchedFlow) {
-                console.log("No flow matched for message:", messageText);
+                console.log("🚫 No active flow matched for keyword:", keyword, "Merchant:", merchantId);
                 return res.sendStatus(200);
             }
 
             flow = matchedFlow;
-            console.log("Page ID inserting", pageId)
+            console.log("✅ Flow matched:", flow.name);
+
             const { data: newConversation, error: insertError } =
                 await supabaseAdmin
                     .from("conversations")
                     .insert({
                         merchant_id: merchantId,
-                        page_id: pageId,          // 👈 ADD THIS
+                        page_id: pageId,
                         user_psid: senderId,
                         flow_id: flow.id,
                         temp_data: {},
@@ -95,13 +102,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     .single();
 
             if (insertError) {
-                console.log("Insert conversation error:", insertError);
+                console.error("❌ Insert conversation error:", insertError);
                 return res.sendStatus(200);
             }
 
-
             conversation = newConversation;
         } else {
+            console.log("♻️ Existing conversation found:", conversation.id);
             const { data: existingFlow } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
@@ -112,6 +119,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
         }
 
         if (!conversation || !flow) {
+            console.log("⚠️ Conversation or flow missing at runtime", { conversation: !!conversation, flow: !!flow });
             return res.sendStatus(200);
         }
 

@@ -11,12 +11,16 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
         // 1. Get merchant subscription status from merchants table
         const { data: merchant, error } = await supabaseAdmin
             .from("merchants")
-            .select("subscription_status, trial_ends_at, subscription_plan")
-            .eq("user_id", userId)
+            .select("id, subscription_status, trial_ends_at, subscription_plan")
+            .eq("id", userId)
             .maybeSingle();
 
         if (error || !merchant) {
-            return res.status(403).json({ error: "လုပ်ငန်းမှတ်တမ်း မတွေ့ရှိပါ။ ကျေးဇူးပြု၍ အကောင့်ပြန်ဝင်ပါ။" });
+            console.error("❌ Subscription Check Failed:", { userId, error, merchantFound: !!merchant });
+            return res.status(403).json({
+                error: "လုပ်ငန်းမှတ်တမ်း မတွေ့ရှိပါ။ ကျေးဇူးပြု၍ အကောင့်ပြန်ဝင်ပါ။",
+                details: `User ID: ${userId}`
+            });
         }
 
         // 2. Check Trial expiry

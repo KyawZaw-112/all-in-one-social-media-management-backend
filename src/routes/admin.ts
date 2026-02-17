@@ -7,9 +7,24 @@ const router = Router();
 // Middleware to check if user is admin (You can enhance this later)
 // For now, we assume the first user or specific emails are admins
 const requireAdmin = async (req: any, res: any, next: any) => {
-    // Basic protection - checking against a known admin email or flag in DB
-    // In production, you'd check a 'role' column in your users/merchants table
-    next();
+    // 1. Check hardcoded admin email
+    if (req.user?.email === "admin@autoreply.biz") {
+        return next();
+    }
+
+    // 2. Check admin_users table
+    const { data: adminRecord } = await supabaseAdmin
+        .from("admin_users")
+        .select("*")
+        .eq("user_id", req.user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+    if (adminRecord) {
+        return next();
+    }
+
+    return res.status(403).json({ error: "Access denied. Admin only." });
 };
 
 router.use(requireAuth);
@@ -47,8 +62,7 @@ router.get("/system-stats", async (req, res) => {
                 shop: merchants.filter(m => m.subscription_plan === 'shop').length,
                 cargo: merchants.filter(m => m.subscription_plan === 'cargo').length,
             },
-            estimatedMonthlyRevenue: (merchants.filter(m => m.subscription_status === 'active' && m.subscription_plan === 'shop').length * 15000) +
-                (merchants.filter(m => m.subscription_status === 'active' && m.subscription_plan === 'cargo').length * 20000),
+            estimatedMonthlyRevenue: (merchants.filter(m => m.subscription_status === 'active').length * 2000),
             systemHealth: {
                 fbPages: totalPages || 0,
                 messagesProcessed: totalMessages || 0,
@@ -57,6 +71,7 @@ router.get("/system-stats", async (req, res) => {
 
         res.json({ success: true, data: stats });
     } catch (error: any) {
+        console.error("Stats Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -67,17 +82,29 @@ router.get("/system-stats", async (req, res) => {
  */
 router.get("/merchants", async (req, res) => {
     try {
-        const { data, error } = await supabaseAdmin
+        // 1. Fetch Merchants
+        const { data: merchants, error: mError } = await supabaseAdmin
             .from("merchants")
-            .select(`
-                *,
-                user:user_id (email)
-            `)
+            .select("*")
             .order("created_at", { ascending: false });
 
-        if (error) throw error;
-        res.json({ success: true, data });
+        if (mError) throw mError;
+
+        // 2. Fetch Users from Auth to get emails
+        const { data: { users }, error: uError } = await supabaseAdmin.auth.admin.listUsers();
+        if (uError) throw uError;
+
+        // 3. Map emails to merchants
+        const enrichedMerchants = merchants.map(m => ({
+            ...m,
+            user: {
+                email: users.find(u => u.id === m.id)?.email || "Unknown"
+            }
+        }));
+
+        res.json({ success: true, data: enrichedMerchants });
     } catch (error: any) {
+        console.error("Merchants Fetch Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
