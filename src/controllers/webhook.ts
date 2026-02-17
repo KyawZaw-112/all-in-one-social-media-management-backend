@@ -43,7 +43,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         if (!connection) return res.sendStatus(200);
 
-        const merchantId = connection.user_id;
+        const merchantId = connection.merchant_id;
 
         let { data: conversation } = await supabaseAdmin
             .from("conversations")
