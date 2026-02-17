@@ -57,7 +57,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         // 3️⃣ If no conversation → match trigger
         if (!conversation) {
-            const { data: matchedFlow,error:errorFlow } = await supabaseAdmin
+            const { data: matchedFlow, error: errorFlow } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
                 .eq("merchant_id", merchantId)
@@ -79,7 +79,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             }
 
             flow = matchedFlow;
-            console.log("Page ID inserting",pageId)
+            console.log("Page ID inserting", pageId)
             const { data: newConversation, error: insertError } =
                 await supabaseAdmin
                     .from("conversations")
@@ -122,14 +122,32 @@ export const handleWebhook = async (req: Request, res: Response) => {
             flow
         );
 
-        // 5️⃣ Auto create order if completed
+        // 5️⃣ Auto create order/shipment if completed
         if (result.order_complete) {
-            await supabaseAdmin.from("orders").insert({
-                merchant_id: merchantId,
-                conversation_id: conversation.id,
-                ...result.temp_data,
-                status: "pending",
-            });
+            const businessType = result.business_type || flow.business_type || 'online_shop';
+
+            if (businessType === 'cargo') {
+                // Create shipment record for cargo business
+                await supabaseAdmin.from("shipments").insert({
+                    merchant_id: merchantId,
+                    conversation_id: conversation.id,
+                    package_type: result.temp_data.package_type,
+                    weight: result.temp_data.weight,
+                    pickup_address: result.temp_data.pickup_address,
+                    delivery_address: result.temp_data.delivery_address,
+                    phone_number: result.temp_data.phone_number,
+                    delivery_urgency: result.temp_data.delivery_urgency || 'standard',
+                    status: "pending",
+                });
+            } else {
+                // Create order record for online shop
+                await supabaseAdmin.from("orders").insert({
+                    merchant_id: merchantId,
+                    conversation_id: conversation.id,
+                    ...result.temp_data,
+                    status: "pending",
+                });
+            }
 
             await supabaseAdmin
                 .from("conversations")
