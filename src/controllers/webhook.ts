@@ -74,7 +74,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .from("conversations")
                 .insert({
                     merchant_id: merchantId,
-                    user_psid: senderId,
+                    user_id: senderId,
                     flow_id: flow.id,
                     temp_data: {},
                     status: "active",
