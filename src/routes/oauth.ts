@@ -42,7 +42,7 @@ router.get("/facebook", async (req, res) => {
         client_id: process.env.FACEBOOK_APP_ID!,
         redirect_uri: process.env.FACEBOOK_REDIRECT_URI!,
         response_type: "code",
-        scope: "pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging",
+        scope: "email,public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging",
         state: userId, // 🔥 user id store
         auth_type: "rerequest", // 🔥 always ask for permissions
     });
@@ -115,6 +115,7 @@ router.get("/facebook/callback", async (req, res) => {
             { params: { access_token: longLivedToken } }
         );
 
+        console.log("📄 Facebook me/accounts response:", JSON.stringify(pagesRes.data, null, 2));
         const pages = pagesRes.data.data || [];
 
         if (pages.length === 0) {

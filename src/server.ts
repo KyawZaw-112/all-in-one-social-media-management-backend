@@ -37,6 +37,7 @@ app.get("/", (req, res) => {
 });
 
 // API Routes
+console.log("🛠️ Registering routes...");
 app.use("/api/automation", automationRoutes);
 app.use("/api/webhook", webhookRoutes);
 app.use("/api/oauth", oauthRoutes);
@@ -45,7 +46,14 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/admin/payments", adminPaymentsRoutes);
 app.use("/api/platforms", platformsRoutes);
 app.use("/api/auto-reply", autoReplyRoutes);
-app.use("/api/merchants", merchantRoutes);
+
+console.log("📦 Registering merchants route...");
+if (merchantRoutes) {
+    app.use("/api/merchants", merchantRoutes);
+    console.log("✅ Merchants route registered successfully");
+} else {
+    console.error("❌ CRITICAL: merchantRoutes is undefined!");
+}
 
 // Error Handling Middleware
 app.use((err: any, req: any, res: any, next: any) => {

@@ -248,4 +248,20 @@ router.get("/shipments", requireAuth, async (req: any, res) => {
     }
 });
 
+router.get("/debug-schema", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+
+        const { data: order } = await supabaseAdmin.from("orders").select("*").limit(1);
+        const { data: shipment } = await supabaseAdmin.from("shipments").select("*").limit(1);
+
+        res.json({
+            orders: order?.[0] ? Object.keys(order[0]) : "empty",
+            shipments: shipment?.[0] ? Object.keys(shipment[0]) : "empty"
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
