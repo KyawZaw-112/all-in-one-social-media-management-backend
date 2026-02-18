@@ -16,28 +16,30 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
             .maybeSingle();
 
         if (error || !merchant) {
-            console.log("⚠️ Merchant profile missing for User ID:", userId, "- Creating default profile...");
+            console.log("⚠️ Merchant profile missing for User ID:", userId, "DB error:", error?.message);
+            console.log("   Attempting to auto-create merchant profile...");
 
-            // Auto-create merchant profile if missing (Self-healing)
+            // Auto-create merchant profile if missing (Self-healing via upsert)
             const { data: newMerchant, error: createError } = await supabaseAdmin
                 .from("merchants")
-                .insert({
+                .upsert({
                     id: userId,
                     business_name: "My Business",
                     subscription_plan: "shop",
                     subscription_status: "active",
                     trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                })
+                }, { onConflict: "id" })
                 .select("id, subscription_status, trial_ends_at, subscription_plan")
                 .single();
 
             if (createError || !newMerchant) {
-                console.error("❌ Failed to auto-create merchant:", createError);
+                console.error("❌ Failed to auto-create merchant:", JSON.stringify(createError));
                 return res.status(403).json({
                     error: "Merchant profile missing and creation failed. Please contact support.",
                     details: createError?.message
                 });
             }
+            console.log("✅ Merchant profile auto-created for:", userId);
 
             // Use the new merchant
             req.merchant = newMerchant;
