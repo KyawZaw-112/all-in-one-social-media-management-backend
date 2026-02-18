@@ -190,8 +190,9 @@ router.get("/facebook/callback", async (req, res) => {
 
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     } catch (error: any) {
-        console.error(error.response?.data || error.message);
-        res.status(500).json({ error: "OAuth failed" });
+        console.error("OAuth Error:", error.response?.data || error.message);
+        const errorMsg = encodeURIComponent(error.message || "OAuth validation failed");
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?error=true&message=${errorMsg}`);
     }
 });
 
