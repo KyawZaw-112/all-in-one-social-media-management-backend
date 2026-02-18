@@ -224,15 +224,25 @@ router.patch("/flows/:id/toggle", requireAuth, async (req: any, res) => {
 router.get("/orders", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
+        console.log("📦 Fetching orders for user:", userId);
+
         const { data, error } = await supabaseAdmin
             .from("orders")
             .select("*")
             .eq("merchant_id", userId)
             .order("created_at", { ascending: false });
 
-        if (error) throw error;
-        res.json({ success: true, data });
+        if (error) {
+            console.error("❌ Orders query error:", error);
+            // If table doesn't exist, return empty data instead of error
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+                return res.json({ success: true, data: [] });
+            }
+            throw error;
+        }
+        res.json({ success: true, data: data || [] });
     } catch (error: any) {
+        console.error("❌ Orders endpoint error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -240,15 +250,24 @@ router.get("/orders", requireAuth, async (req: any, res) => {
 router.get("/shipments", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
+        console.log("🚚 Fetching shipments for user:", userId);
+
         const { data, error } = await supabaseAdmin
             .from("shipments")
             .select("*")
             .eq("merchant_id", userId)
             .order("created_at", { ascending: false });
 
-        if (error) throw error;
-        res.json({ success: true, data });
+        if (error) {
+            console.error("❌ Shipments query error:", error);
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+                return res.json({ success: true, data: [] });
+            }
+            throw error;
+        }
+        res.json({ success: true, data: data || [] });
     } catch (error: any) {
+        console.error("❌ Shipments endpoint error:", error);
         res.status(500).json({ error: error.message });
     }
 });
