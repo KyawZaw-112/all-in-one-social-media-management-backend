@@ -249,15 +249,22 @@ router.post("/register", async (req, res) => {
         // Use explicit business_type or derive from subscription_plan
         const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'shop');
 
-        await supabaseAdmin.from("merchants").insert({
+        console.log("🏪 Creating merchant profile for user:", authData.user.id);
+        const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
             id: authData.user.id,
-            page_id: "pending",
             business_name: `${name}'s Business`,
             subscription_plan: subscription_plan || 'shop',
             business_type: businessType, // Save business type
             trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             subscription_status: 'active'
         });
+
+        if (merchantError) {
+            console.error("❌ Merchant profile creation FAILED:", merchantError);
+            throw new Error(`Failed to create merchant profile: ${merchantError.message}`);
+        }
+
+        console.log("✅ Merchant profile created successfully");
 
         // 🔥 Seed default flows
         await seedDefaultFlows(authData.user.id, businessType);
