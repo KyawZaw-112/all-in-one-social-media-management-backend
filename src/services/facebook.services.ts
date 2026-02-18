@@ -61,7 +61,7 @@ export async function subscribePageToWebhook(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 access_token: pageAccessToken,
-                subscribed_fields: ["messages","messaging_postbacks"], // 👈 REQUIRED
+                subscribed_fields: ["messages", "messaging_postbacks"], // 👈 REQUIRED
             }),
         }
     );
@@ -112,5 +112,20 @@ export async function sendMessage(
             error: errorData
         });
         throw new Error(`Facebook API Error: ${response.status} ${response.statusText}`);
+    }
+}
+
+export async function getUserProfile(psid: string, pageToken: string) {
+    try {
+        const { data } = await axios.get(`https://graph.facebook.com/v19.0/${psid}`, {
+            params: {
+                fields: "first_name,last_name,name",
+                access_token: pageToken
+            }
+        });
+        return data;
+    } catch (error) {
+        console.error("⚠️ Failed to fetch user profile:", error);
+        return null;
     }
 }

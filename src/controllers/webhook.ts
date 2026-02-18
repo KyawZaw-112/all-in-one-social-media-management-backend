@@ -1,4 +1,4 @@
-import { sendMessage } from "../services/facebook.services.js";
+import { sendMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response } from "express";
 import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../services/conversationEngine.js";
@@ -194,8 +194,25 @@ export const handleWebhook = async (req: Request, res: Response) => {
             conversation = newConv;
             console.log("✨ New conversation created:", conversation.id);
 
+            // 🔥 Fetch User Profile Name
+            let senderName = "Facebook User";
+            try {
+                const profile = await getUserProfile(senderId, connection.page_access_token);
+                if (profile?.name) {
+                    senderName = profile.name;
+                    console.log("👤 Fetched User Name:", senderName);
+                }
+            } catch (err) {
+                console.error("⚠️ Failed to fetch user name:", err);
+            }
+
             // Send welcome message first
-            const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop');
+            const welcomeMsg = getWelcomeMessage(
+                flow.business_type || 'online_shop',
+                senderName,
+                connection.page_name,
+                
+            );
             try {
                 await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
 

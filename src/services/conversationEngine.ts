@@ -377,11 +377,14 @@ const CONVERSATION_FLOWS: Record<string, ConversationFlowDef> = {
 };
 
 // ─── Welcome Messages ───────────────────────────────────────────
-export function getWelcomeMessage(businessType: string): string {
+export function getWelcomeMessage(businessType: string, senderName?: string, pageName?: string): string {
+    const greeting = senderName ? `မင်္ဂလာပါ ${senderName} ခင်ဗျာ 🙏` : "မင်္ဂလာပါခင်ဗျာ 🙏";
+    const shop = pageName ? `${pageName} မှ ကြိုဆိုပါတယ်။` : "ကြိုဆိုပါတယ်။";
+
     if (businessType === "cargo") {
         return (
-            "မင်္ဂလာပါခင်ဗျာ 🙏\n" +
-            "Cargo Service မှ ကြိုဆိုပါတယ်။\n\n" +
+            `${greeting}\n` +
+            `${shop}\n\n` +
             "✅ တရုတ် → မြန်မာ\n" +
             "✅ ထိုင်း → မြန်မာ\n" +
             "✅ ဂျပန် → မြန်မာ\n\n" +
@@ -389,8 +392,8 @@ export function getWelcomeMessage(businessType: string): string {
         );
     }
     return (
-        "မင်္ဂလာပါခင်ဗျာ 🙏\n" +
-        "Online Shop မှ ကြိုဆိုပါတယ်။\n\n" +
+        `${greeting}\n` +
+        `${shop}\n\n` +
         "🛍️ Live Sale မှာ ဝယ်ယူသည့်အတွက်\n" +
         "ကျေးဇူးတင်ပါသည် 💖\n\n" +
         "Order စတင်ပါမည်..."
