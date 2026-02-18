@@ -75,13 +75,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
         // Take the latest one
         let conversation = activeConvs && activeConvs.length > 0 ? activeConvs[0] : null;
 
-        // Cleanup: If there are multiple active conversations, mark older ones as completed/superseded
+        // Cleanup: If there are multiple active conversations, DELETE older ones
+        // to prevent database clutter (as per user concern).
         if (activeConvs && activeConvs.length > 1) {
-            console.log(`🧹 Cleaning up ${activeConvs.length - 1} duplicate active conversations for PSID: ${senderId}`);
+            console.log(`🧹 Deleting ${activeConvs.length - 1} redundant active conversations for PSID: ${senderId}`);
             const olderIds = activeConvs.slice(1).map(c => c.id);
+
+            // Note: In a production environment with foreign keys, 
+            // you might want to switch to 'superseded' status if you want to keep history,
+            // but for "trash prevention", immediate deletion of unfinished sessions is effective.
             await supabaseAdmin
                 .from("conversations")
-                .update({ status: "superseded" })
+                .delete()
                 .in("id", olderIds);
         }
 
