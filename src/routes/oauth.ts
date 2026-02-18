@@ -144,6 +144,7 @@ router.get("/facebook/callback", async (req, res) => {
                 console.log("Creating missing merchant record for user:", userId);
                 const { error: merchError } = await supabaseAdmin.from("merchants").insert({
                     id: userId,
+                    page_id: page.id,
                     business_name: page.name,
                     business_type: "shop",
                     subscription_plan: "shop",

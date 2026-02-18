@@ -24,6 +24,7 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                 .from("merchants")
                 .upsert({
                     id: userId,
+                    page_id: "pending",
                     business_name: "My Business",
                     subscription_plan: "shop",
                     subscription_status: "active",
