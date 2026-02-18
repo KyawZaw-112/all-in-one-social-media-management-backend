@@ -551,6 +551,7 @@ async function saveReplyMessage(conversation: any, flow: any, reply: string) {
         channel: "facebook",
         status: "replied",
         created_at: new Date().toISOString(),
+        conversation_id: conversation.id,
         metadata: { conversation_id: conversation.id },
     });
 }

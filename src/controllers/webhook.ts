@@ -23,6 +23,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
     try {
         const entry = req.body.entry?.[0];
         const messaging = entry?.messaging?.[0];
+        const isEcho = messaging?.message?.is_echo;
+
+        if (isEcho) {
+            console.log("🗣️ Ignoring message echo from Facebook");
+            return res.sendStatus(200);
+        }
 
         const pageId = entry?.id;
         const senderId = messaging?.sender?.id;
@@ -106,6 +112,17 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 const defaultReply = getDefaultReply();
                 try {
                     await sendMessage(pageId, connection.page_access_token, senderId, defaultReply);
+
+                    // Log fallback reply
+                    await supabaseAdmin.from("messages").insert({
+                        user_id: merchantId,
+                        sender_id: merchantId,
+                        sender_email: "AI-Assistant",
+                        sender_name: "Auto-Reply Bot",
+                        body: defaultReply,
+                        channel: "facebook",
+                        status: "replied"
+                    });
                 } catch (sendErr) {
                     console.error("❌ Failed to send default reply:", sendErr);
                 }
@@ -141,6 +158,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
             const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop');
             try {
                 await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
+
+                // Log welcome message
+                await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: merchantId,
+                    sender_email: "AI-Assistant",
+                    sender_name: "Auto-Reply Bot",
+                    body: welcomeMsg,
+                    channel: "facebook",
+                    status: "replied",
+                    conversation_id: conversation.id
+                });
             } catch (welcomeErr) {
                 console.error("⚠️ Welcome message send failed (non-critical):", welcomeErr);
             }
@@ -181,12 +210,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     isResuming = false; // Treat as new flow start since we just matched it
                 } else {
                     console.log("🚫 Could not re-match flow. Treating as orphaned message.");
-                    // Fallback logic duplicated here or we can just let it fail below and send fallback
                 }
             }
         }
 
-        // 4.5 Record linked message
+        // 4.5 Record incoming message
         const { error: msgErr } = await supabaseAdmin.from("messages").insert({
             user_id: merchantId,
             sender_id: senderId,
@@ -195,7 +223,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
             body: messageText,
             channel: "facebook",
             status: "received",
-            metadata: { conversation_id: conversation.id } // 👈 Store in metadata instead
+            conversation_id: conversation?.id,
+            metadata: { conversation_id: conversation?.id }
         });
         if (msgErr) console.error("❌ Failed to record linked message:", msgErr);
 
