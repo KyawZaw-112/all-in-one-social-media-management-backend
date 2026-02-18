@@ -9,6 +9,11 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireActiveSubscription);
 
+// Get current merchant profile
+router.get("/me", async (req: any, res) => {
+    res.json({ success: true, data: req.merchant });
+});
+
 // Get all flows for the authenticated user
 router.get("/flows", async (req, res) => {
     try {
