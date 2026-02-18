@@ -66,7 +66,11 @@ export async function subscribePageToWebhook(
         }
     );
 
-    const data = await response.json();
+    const data: any = await response.json();
+    if (!response.ok) {
+        console.error("Subscribe failed:", data);
+        throw new Error(data.error?.message || "Failed to subscribe webhook");
+    }
     console.log("Subscribe response:", data);
 }
 

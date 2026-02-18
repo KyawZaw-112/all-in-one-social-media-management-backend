@@ -146,6 +146,7 @@ router.get("/facebook/callback", async (req, res) => {
 
             if (error) {
                 console.error("Insert error:", error);
+                throw error; // Stop execution if DB insert fails
             }
 
             // Update Merchant Profile with Page Info & Business Type (if not set)
