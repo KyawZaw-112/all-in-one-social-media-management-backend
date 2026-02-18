@@ -146,13 +146,44 @@ export const handleWebhook = async (req: Request, res: Response) => {
             }
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
-            const { data: existingFlow } = await supabaseAdmin
-                .from("automation_flows")
-                .select("*")
-                .eq("id", conversation.flow_id)
-                .single();
 
-            flow = existingFlow;
+            if (conversation.flow_id) {
+                const { data: existingFlow } = await supabaseAdmin
+                    .from("automation_flows")
+                    .select("*")
+                    .eq("id", conversation.flow_id)
+                    .maybeSingle(); // Use maybeSingle to avoid error if missing
+
+                flow = existingFlow;
+            }
+
+            // If flow is still missing (e.g. flow was deleted), try to match a new one
+            if (!flow) {
+                console.log("⚠️ Flow missing or null for active conversation. Attempting to re-match...");
+                const rawMessage = messageText.toLowerCase().trim();
+
+                const { data: flows } = await supabaseAdmin
+                    .from("automation_flows")
+                    .select("*")
+                    .eq("merchant_id", merchantId)
+                    .eq("is_active", true);
+
+                const matchedFlow = flows?.find(f => {
+                    const keyword = f.trigger_keyword.toLowerCase().trim();
+                    return rawMessage.includes(keyword);
+                });
+
+                if (matchedFlow) {
+                    console.log("✅ Re-matched orphaned conversation to flow:", matchedFlow.name);
+                    flow = matchedFlow;
+                    // Update conversation with new flow_id
+                    await supabaseAdmin.from("conversations").update({ flow_id: flow.id }).eq("id", conversation.id);
+                    isResuming = false; // Treat as new flow start since we just matched it
+                } else {
+                    console.log("🚫 Could not re-match flow. Treating as orphaned message.");
+                    // Fallback logic duplicated here or we can just let it fail below and send fallback
+                }
+            }
         }
 
         // 4.5 Record linked message
