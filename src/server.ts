@@ -12,6 +12,7 @@ import paymentsRoutes from "./routes/payments.js";
 import adminPaymentsRoutes from "./routes/adminPayments.js";
 import platformsRoutes from "./routes/platforms.js";
 import autoReplyRoutes from "./routes/autoReply.js";
+import merchantRoutes from "./routes/merchants.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -44,6 +45,7 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/admin/payments", adminPaymentsRoutes);
 app.use("/api/platforms", platformsRoutes);
 app.use("/api/auto-reply", autoReplyRoutes);
+app.use("/api/merchants", merchantRoutes);
 
 // Error Handling Middleware
 app.use((err: any, req: any, res: any, next: any) => {
