@@ -41,7 +41,7 @@ router.get("/facebook", async (req, res) => {
         client_id: process.env.FACEBOOK_APP_ID!,
         redirect_uri: process.env.FACEBOOK_REDIRECT_URI!,
         response_type: "code",
-        scope: "pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging\n",
+        scope: "pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging",
         state: userId, // 🔥 user id store
         auth_type: "rerequest", // 🔥 always ask for permissions
     });
@@ -262,6 +262,7 @@ router.post("/register", async (req, res) => {
 
         await supabaseAdmin.from("merchants").insert({
             id: authData.user.id,
+            page_id: "pending",
             business_name: `${name}'s Business`,
             subscription_plan: subscription_plan || 'shop',
             business_type: businessType, // Save business type
