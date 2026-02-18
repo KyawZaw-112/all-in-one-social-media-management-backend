@@ -127,34 +127,29 @@ router.get("/facebook/callback", async (req, res) => {
         const page = pages[0];
         console.log(`🔗 Connecting Page: ${page.name} (${page.id}) for user: ${userId}`);
 
-        // Check if ANY other page is connected for this user and remove it (Enforce 1-page rule)
-        await supabaseAdmin
-            .from("platform_connections")
-            .delete()
-            .eq("user_id", userId);
-
-        // 🔥 ENSURE MERCHANT EXISTS FIRST (defensive)
+        // 🔥 ENSURE MERCHANT EXISTS (defensive)
         const { data: existingMerchant } = await supabaseAdmin
             .from("merchants")
-            .select("id")
+            .select("id, business_type")
             .eq("id", userId)
             .maybeSingle();
 
         if (!existingMerchant) {
-            console.log("Creating missing merchant record for user:", userId);
+            console.log("⚠️ Creating missing merchant record during FB callback for user:", userId);
             const { error: merchError } = await supabaseAdmin.from("merchants").insert({
                 id: userId,
                 page_id: page.id,
                 business_name: page.name,
-                business_type: "shop",
+                business_type: "shop", // Default if record is missing entirely
                 subscription_plan: "shop",
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
-            if (merchError) {
-                console.error("Failed to create missing merchant:", merchError);
-            }
+            if (merchError) console.error("Failed to create missing merchant:", merchError);
+        } else {
+            console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
+
 
         const { error: insertError } = await supabaseAdmin
             .from("platform_connections")
@@ -236,6 +231,7 @@ router.delete("/platforms/:pageId", requireAuth, async (req, res) => {
 router.post("/register", async (req, res) => {
     try {
         const { name, email, password, subscription_plan, trial_ends_at } = req.body;
+        console.log("📝 Registering new user:", { email, name, subscription_plan, business_type: req.body.business_type });
 
         if (!email || !password || !name) {
             return res.status(400).json({ error: "Name, email and password are required" });
@@ -282,11 +278,12 @@ router.post("/register", async (req, res) => {
 
         res.status(201).json({
             success: true,
-            token: sessionData.session.access_token,
+            token: sessionData.session?.access_token,
             user: { ...sessionData.user, role: profile?.role || 'user' },
             message: "Registration successful! Welcome! 🚀"
         });
     } catch (error: any) {
+        console.error("❌ Registration error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
