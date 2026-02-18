@@ -60,7 +60,6 @@ router.get("/me", requireAuth, async (req: any, res) => {
             .order("created_at", { ascending: false })
             .limit(10);
 
-        // 3. Construct Response
         res.json({
             success: true,
             data: {
@@ -102,6 +101,46 @@ router.patch("/toggle-auto-reply", requireAuth, async (req: any, res) => {
     } catch (error: any) {
         console.error("Toggle auto-reply error:", error.message);
         res.status(500).json({ error: "Failed to toggle auto-reply" });
+    }
+});
+
+/**
+ * GET /api/merchants/orders
+ * Fetch all orders for the merchant (no subscription check needed)
+ */
+router.get("/orders", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { data, error } = await supabaseAdmin
+            .from("orders")
+            .select("*")
+            .eq("merchant_id", userId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/merchants/shipments
+ * Fetch all shipments for the merchant (no subscription check needed)
+ */
+router.get("/shipments", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { data, error } = await supabaseAdmin
+            .from("shipments")
+            .select("*")
+            .eq("merchant_id", userId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 });
 
