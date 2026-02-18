@@ -254,6 +254,7 @@ router.post("/register", async (req, res) => {
         console.log("🏪 Creating merchant profile for user:", authData.user.id);
         const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
             id: authData.user.id,
+            page_id: `pending-${authData.user.id}`, // Unique placeholder to satisfy NOT NULL & UNIQUE
             business_name: `${name}'s Business`,
             subscription_plan: subscription_plan || 'shop',
             business_type: businessType, // Save business type
