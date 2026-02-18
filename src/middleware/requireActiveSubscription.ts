@@ -20,7 +20,6 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
             console.log("   Attempting to auto-create merchant profile...");
 
             // Auto-create merchant profile if missing (Self-healing via upsert)
-            // Use unique page_id to avoid "page_id already exists" unique constraint errors
             const { data: newMerchant, error: createError } = await supabaseAdmin
                 .from("merchants")
                 .upsert({
@@ -30,19 +29,19 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                     business_type: "online_shop",
                     subscription_plan: "shop",
                     subscription_status: "active",
-                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                }, { onConflict: "id" })
+                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    updated_at: new Date().toISOString()
+                }, { onConflict: "id", ignoreDuplicates: false })
                 .select("id, subscription_status, trial_ends_at, subscription_plan")
-                .single();
+                .maybeSingle();
 
             if (createError || !newMerchant) {
                 console.error("❌ CRITICAL: Merchant auto-creation failed for User ID:", userId);
                 console.error("Error Object:", JSON.stringify(createError, null, 2));
                 return res.status(403).json({
-                    error: "Merchant profile missing and creation failed. Please contact support.",
-                    details: createError?.message || "Unknown DB error",
-                    hint: createError?.hint || "Please check your database constraints and Supabase logs.",
-                    code: createError?.code,
+                    error: "Merchant profile missing and creation failed.",
+                    details: createError?.message || "Record not returned after upsert",
+                    hint: "Please ensure your Supabase user exists and is a valid UUID.",
                     userId: userId
                 });
             }

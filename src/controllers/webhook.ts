@@ -62,15 +62,28 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         // 2️⃣ Check for active conversation
         let isResuming = true;
-        let { data: conversation, error: convError } = await supabaseAdmin
+        let { data: activeConvs, error: convError } = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("merchant_id", merchantId)
             .eq("user_psid", senderId)
             .eq("status", "active")
-            .maybeSingle();
+            .order("created_at", { ascending: false });
 
         if (convError) console.error("❌ Conversation Search Error:", convError);
+
+        // Take the latest one
+        let conversation = activeConvs && activeConvs.length > 0 ? activeConvs[0] : null;
+
+        // Cleanup: If there are multiple active conversations, mark older ones as completed/superseded
+        if (activeConvs && activeConvs.length > 1) {
+            console.log(`🧹 Cleaning up ${activeConvs.length - 1} duplicate active conversations for PSID: ${senderId}`);
+            const olderIds = activeConvs.slice(1).map(c => c.id);
+            await supabaseAdmin
+                .from("conversations")
+                .update({ status: "superseded" })
+                .in("id", olderIds);
+        }
 
         let flow;
 
