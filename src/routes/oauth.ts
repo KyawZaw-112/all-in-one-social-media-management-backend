@@ -237,10 +237,12 @@ router.post("/register", async (req, res) => {
             return res.status(400).json({ error: "Name, email and password are required" });
         }
 
-        const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+        /* 1️⃣ Create User in Supabase Auth (Admin mode - bypasses RLS/session pollution) */
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
-            options: { data: { full_name: name } }
+            email_confirm: true,
+            user_metadata: { full_name: name }
         });
 
         if (authError) throw authError;
@@ -269,7 +271,13 @@ router.post("/register", async (req, res) => {
         // 🔥 Seed default flows
         await seedDefaultFlows(authData.user.id, businessType);
 
-        const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
+        /* 2️⃣ Sign In with a TEMPORARY client to get the token (Prevents polluting supabaseAdmin) */
+        const { createClient } = await import("@supabase/supabase-js");
+        const tempClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+            auth: { persistSession: false }
+        });
+
+        const { data: sessionData, error: sessionError } = await tempClient.auth.signInWithPassword({
             email,
             password,
         });
