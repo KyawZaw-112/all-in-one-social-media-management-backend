@@ -102,7 +102,6 @@ export class AutoReplyFeatureController {
                     trigger_keywords,
                     reply_text,
                     is_active,
-                    updated_at: new Date().toISOString(),
                 })
                 .eq('id', id)
                 .select()

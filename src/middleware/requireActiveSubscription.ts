@@ -29,8 +29,7 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                     business_type: "online_shop",
                     subscription_plan: "shop",
                     subscription_status: "active",
-                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                    updated_at: new Date().toISOString()
+                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
                 }, { onConflict: "id", ignoreDuplicates: false })
                 .select("id, subscription_status, trial_ends_at, subscription_plan")
                 .maybeSingle();

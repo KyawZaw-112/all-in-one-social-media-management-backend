@@ -161,8 +161,7 @@ router.put("/merchants/:id/subscription", async (req, res) => {
             .update({
                 subscription_status: status,
                 subscription_plan: plan,
-                trial_ends_at: trial_ends_at,
-                updated_at: new Date().toISOString()
+                trial_ends_at: trial_ends_at
             })
             .eq("id", id);
 
