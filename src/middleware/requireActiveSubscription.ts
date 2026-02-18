@@ -36,11 +36,13 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                 .single();
 
             if (createError || !newMerchant) {
-                console.error("❌ Failed to auto-create merchant:", JSON.stringify(createError));
+                console.error("❌ CRITICAL: Merchant auto-creation failed for User ID:", userId);
+                console.error("Error Object:", JSON.stringify(createError, null, 2));
                 return res.status(403).json({
                     error: "Merchant profile missing and creation failed. Please contact support.",
-                    details: createError?.message,
-                    hint: "This usually means a required database column is missing or a constraint was violated.",
+                    details: createError?.message || "Unknown DB error",
+                    hint: createError?.hint || "Please check your database constraints and Supabase logs.",
+                    code: createError?.code,
                     userId: userId
                 });
             }
