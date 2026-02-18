@@ -124,7 +124,8 @@ const DEFAULT_TEMPLATE = {
 export async function runConversationEngine(
     conversation: any,
     messageText: string,
-    flow: any
+    flow: any,
+    isResuming: boolean = true
 ) {
     // Save user message - MATCH PRODUCTION SCHEMA
     // 💡 DEPRECATED: Now handled in webhook controller to catch non-matched messages
@@ -158,10 +159,8 @@ export async function runConversationEngine(
 
     const currentStep = conversationFlow.steps[currentStepIndex];
 
-    // If this is not the first message, validate and save the previous answer
-    if (currentStepIndex > 0 || Object.keys(tempData).length > 0) {
-        const previousStep = conversationFlow.steps[currentStepIndex - 1] || currentStep;
-
+    // If this is not the first message (it's an answer), validate and save it
+    if (isResuming) {
         if (currentStep && !tempData[currentStep.field]) {
             // Validate the message against current step
             const isValid = currentStep.validation ? currentStep.validation(messageText) : true;

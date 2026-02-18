@@ -55,6 +55,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
         console.log("👤 Merchant:", merchantId, "Page Access Token exists:", !!connection.page_access_token);
 
         // 2️⃣ Check for active conversation
+        let isResuming = true;
         let { data: conversation, error: convError } = await supabaseAdmin
             .from("conversations")
             .select("*")
@@ -69,6 +70,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         // 3️⃣ Match flow or load existing
         if (!conversation) {
+            isResuming = false;
             const rawMessage = messageText.toLowerCase().trim();
             console.log("🆕 Checking for flow trigger. Message:", rawMessage);
 
@@ -155,8 +157,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
         }
 
         // 5️⃣ Run conversation engine
-        console.log("⚙️ Running Conversation Engine...");
-        const result = await runConversationEngine(conversation, messageText, flow);
+        console.log("⚙️ Running Conversation Engine. Resuming:", isResuming);
+        const result = await runConversationEngine(conversation, messageText, flow, isResuming);
         console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
 
         // 6️⃣ Completion Logic
