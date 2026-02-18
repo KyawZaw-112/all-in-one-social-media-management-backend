@@ -60,6 +60,28 @@ export const handleWebhook = async (req: Request, res: Response) => {
         const merchantId = connection.user_id || connection.merchant_id;
         console.log("👤 Merchant:", merchantId, "Page Access Token exists:", !!connection.page_access_token);
 
+        // 1.5️⃣ Check Subscription Status
+        const { data: merchant, error: merchError } = await supabaseAdmin
+            .from("merchants")
+            .select("subscription_status, trial_ends_at")
+            .eq("id", merchantId)
+            .maybeSingle();
+
+        if (merchError) console.error("❌ Merchant Search Error:", merchError);
+
+        if (merchant) {
+            const now = new Date();
+            const trialEnd = merchant.trial_ends_at ? new Date(merchant.trial_ends_at) : null;
+            const isExpired = merchant.subscription_status === 'expired' || (trialEnd && trialEnd < now);
+
+            if (isExpired && merchant.subscription_status !== 'active') {
+                console.log("⚠️ Subscription expired for merchant:", merchantId);
+                // Optional: Send a one-time expiration message? 
+                // For now, just ignore to save costs/API limits.
+                return res.sendStatus(200);
+            }
+        }
+
         // 2️⃣ Check for active conversation
         let isResuming = true;
         let { data: activeConvs, error: convError } = await supabaseAdmin
@@ -184,6 +206,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     sender_email: "AI-Assistant",
                     sender_name: "Auto-Reply Bot",
                     body: welcomeMsg,
+                    content: welcomeMsg, // Standardized
                     channel: "facebook",
                     status: "replied",
                     conversation_id: conversation.id
@@ -239,6 +262,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             sender_email: senderId,
             sender_name: "Facebook User",
             body: messageText,
+            content: messageText, // Standardized
             channel: "facebook",
             status: "received",
             conversation_id: conversation?.id,

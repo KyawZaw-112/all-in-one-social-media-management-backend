@@ -548,6 +548,7 @@ async function saveReplyMessage(conversation: any, flow: any, reply: string) {
         sender_email: "AI-Assistant",
         sender_name: "Auto-Reply Bot",
         body: reply,
+        content: reply, // Standardized
         channel: "facebook",
         status: "replied",
         created_at: new Date().toISOString(),
