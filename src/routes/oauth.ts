@@ -268,10 +268,17 @@ router.post("/register", async (req, res) => {
 
         if (sessionError) throw sessionError;
 
+        // Fetch profile to get role
+        const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("role")
+            .eq("id", authData.user.id)
+            .single();
+
         res.status(201).json({
             success: true,
             token: sessionData.session.access_token,
-            user: sessionData.user,
+            user: { ...sessionData.user, role: profile?.role || 'user' },
             message: "Registration successful! Welcome! 🚀"
         });
     } catch (error: any) {
@@ -288,10 +295,18 @@ router.post("/login", async (req, res) => {
         const { email, password } = req.body;
         const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password });
         if (error) throw error;
+
+        // Fetch profile to get role
+        const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("role")
+            .eq("id", data.user.id)
+            .single();
+
         res.json({
             success: true,
             token: data.session?.access_token,
-            user: data.user,
+            user: { ...data.user, role: profile?.role || 'user' },
             message: "Login successful! 👋"
         });
     } catch (error: any) {
