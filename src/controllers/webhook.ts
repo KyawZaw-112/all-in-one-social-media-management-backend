@@ -69,26 +69,41 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         // 3️⃣ Match flow or load existing
         if (!conversation) {
-            const keyword = messageText.toLowerCase().trim();
-            console.log("🆕 Initializing new conversation. Keyword:", keyword);
+            const rawMessage = messageText.toLowerCase().trim();
+            console.log("🆕 Checking for flow trigger. Message:", rawMessage);
 
-            const { data: matchedFlow, error: flowError } = await supabaseAdmin
+            // Get all active flows for this merchant
+            const { data: flows, error: flowError } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
                 .eq("merchant_id", merchantId)
-                .eq("trigger_keyword", keyword)
-                .eq("is_active", true)
-                .maybeSingle();
+                .eq("is_active", true);
 
             if (flowError) console.error("❌ Flow Search Error:", flowError);
 
+            // Flexible Trigger: Check if message contains the trigger keyword
+            const matchedFlow = flows?.find(f => {
+                const keyword = f.trigger_keyword.toLowerCase().trim();
+                return rawMessage.includes(keyword);
+            });
+
             if (!matchedFlow) {
-                console.log("🚫 No active flow matched for:", keyword);
+                console.log("🚫 No active flow matched for:", rawMessage);
+                // Record orphaned message for visibility
+                await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: senderId,
+                    sender_email: senderId,
+                    sender_name: "Facebook User",
+                    body: messageText,
+                    channel: "facebook",
+                    status: "received"
+                });
                 return res.sendStatus(200);
             }
 
             flow = matchedFlow;
-            console.log("✅ Matched Flow:", flow.name, "ID:", flow.id);
+            console.log("✅ Matched Flow:", flow.name, "ID:", flow.id, "triggered by:", rawMessage);
 
             const { data: newConv, error: createError } = await supabaseAdmin
                 .from("conversations")
@@ -121,17 +136,30 @@ export const handleWebhook = async (req: Request, res: Response) => {
             flow = existingFlow;
         }
 
+        // 4.5 Record linked message
+        const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+            user_id: merchantId,
+            sender_id: senderId,
+            sender_email: senderId,
+            sender_name: "Facebook User",
+            body: messageText,
+            channel: "facebook",
+            status: "received",
+            metadata: { conversation_id: conversation.id } // 👈 Store in metadata instead
+        });
+        if (msgErr) console.error("❌ Failed to record linked message:", msgErr);
+
         if (!conversation || !flow) {
             console.error("💥 Critical: Conversation or flow is null after initialization");
             return res.sendStatus(200);
         }
 
-        // 4️⃣ Run conversation engine
+        // 5️⃣ Run conversation engine
         console.log("⚙️ Running Conversation Engine...");
         const result = await runConversationEngine(conversation, messageText, flow);
         console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
 
-        // 5️⃣ Completion Logic
+        // 6️⃣ Completion Logic
         if (result.order_complete) {
             console.log("🎉 Conversation Complete. Saving results...");
             const businessType = result.business_type || flow.business_type || 'online_shop';
@@ -155,7 +183,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
         }
 
-        // 6️⃣ Send Reply
+        // 7️⃣ Send Reply
         console.log("📤 Sending reply to Facebook...");
         await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
         console.log("🏁 Webhook processing finished successfully.");

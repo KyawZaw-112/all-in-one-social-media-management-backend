@@ -61,7 +61,7 @@ export async function subscribePageToWebhook(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 access_token: pageAccessToken,
-                subscribed_fields: ["messages"], // 👈 REQUIRED
+                subscribed_fields: ["messages","messaging_postbacks"], // 👈 REQUIRED
             }),
         }
     );
@@ -92,7 +92,7 @@ export async function sendMessage(
     recipientId: string,
     text: string
 ): Promise<void> {
-    await fetch(
+    const response = await fetch(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
         {
             method: "POST",
@@ -103,4 +103,14 @@ export async function sendMessage(
             }),
         }
     );
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Facebook Send Message Failed:", {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData
+        });
+        throw new Error(`Facebook API Error: ${response.status} ${response.statusText}`);
+    }
 }

@@ -131,7 +131,32 @@ router.get("/facebook/callback", async (req, res) => {
                 .delete()
                 .eq("user_id", userId);
 
-            const { error } = await supabaseAdmin
+            // 🔥 ENSURE MERCHANT EXISTS FIRST (defensive)
+            // If the user registered but the record is missing for some reason, 
+            // the platform_connections insert might fail if there's an RLS policy or FK.
+            const { data: existingMerchant } = await supabaseAdmin
+                .from("merchants")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (!existingMerchant) {
+                console.log("Creating missing merchant record for user:", userId);
+                const { error: merchError } = await supabaseAdmin.from("merchants").insert({
+                    id: userId,
+                    business_name: page.name,
+                    business_type: "shop",
+                    subscription_plan: "shop",
+                    subscription_status: "active",
+                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                });
+                if (merchError) {
+                    console.error("Failed to create missing merchant:", merchError);
+                    // We continue, but it might lead to RLS/FK errors below
+                }
+            }
+
+            const { error: insertError } = await supabaseAdmin
                 .from("platform_connections")
                 .upsert(
                     {
@@ -144,19 +169,17 @@ router.get("/facebook/callback", async (req, res) => {
                     { onConflict: "user_id,page_id" }
                 );
 
-            if (error) {
-                console.error("Insert error:", error);
-                throw error; // Stop execution if DB insert fails
+            if (insertError) {
+                console.error("Insert error in platform_connections:", insertError);
+                if (insertError.message.includes("row-level security policy")) {
+                    console.error("🚨 CRITICAL: RLS Violation detected. Check if SUPABASE_SERVICE_ROLE_KEY is correctly set in production.");
+                    throw new Error("Database Access Error: RLS violation. Please check server configuration (Service Role Key).");
+                }
+                throw insertError;
             }
 
             // Update Merchant Profile with Page Info & Business Type (if not set)
             // Use upsert to handle both new and existing
-            const { data: existingMerchant } = await supabaseAdmin
-                .from("merchants")
-                .select("id, business_type")
-                .eq("id", userId) // Use ID not page_id for reliable lookup
-                .maybeSingle();
-
             if (existingMerchant) {
                 // Update existing
                 await supabaseAdmin
@@ -164,23 +187,10 @@ router.get("/facebook/callback", async (req, res) => {
                     .update({
                         page_id: page.id,
                         business_name: page.name, // optional: sync name
-                        // Don't overwrite business_type if already set
                     })
                     .eq("id", userId);
-            } else {
-                // Insert new (shouldn't happen for registered users, but for FB-first login)
-                await supabaseAdmin
-                    .from("merchants")
-                    .insert({
-                        id: userId,
-                        page_id: page.id,
-                        business_name: page.name,
-                        business_type: "shop", // Default
-                        subscription_plan: "shop",
-                        subscription_status: "active",
-                        trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                    });
             }
+            // else was handled above in the "ENSURE MERCHANT EXISTS FIRST" block
 
             // Subscribe Webhook
             await subscribePageToWebhook(page.id, page.access_token);

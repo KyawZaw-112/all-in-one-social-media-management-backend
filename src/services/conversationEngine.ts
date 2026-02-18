@@ -127,9 +127,11 @@ export async function runConversationEngine(
     flow: any
 ) {
     // Save user message - MATCH PRODUCTION SCHEMA
+    // 💡 DEPRECATED: Now handled in webhook controller to catch non-matched messages
+    /*
     await supabaseAdmin.from("messages").insert({
         user_id: flow.merchant_id || conversation.merchant_id,
-        sender_id: conversation.user_psid, // 👈 REQUIRED & VERIFIED
+        sender_id: conversation.user_psid,
         sender_email: conversation.user_psid,
         sender_name: "Facebook User",
         body: messageText,
@@ -137,6 +139,7 @@ export async function runConversationEngine(
         status: "received",
         created_at: new Date().toISOString(),
     });
+    */
 
     // Get conversation data
     const tempData = conversation.temp_data || {};
@@ -167,9 +170,12 @@ export async function runConversationEngine(
                 const errorReply = `❌ မှားယွင်းနေပါသည်။ Invalid input.\n\n${currentStep.question}`;
 
                 await supabaseAdmin.from("messages").insert({
-                    conversation_id: conversation.id,
-                    role: "assistant",
-                    content: errorReply,
+                    user_id: flow.merchant_id || conversation.merchant_id,
+                    sender_id: flow.merchant_id || conversation.merchant_id,
+                    body: errorReply,
+                    channel: "facebook",
+                    status: "replied",
+                    metadata: { conversation_id: conversation.id, role: "assistant", type: "error" }
                 });
 
                 return {
@@ -242,13 +248,14 @@ export async function runConversationEngine(
     // Save assistant reply - MATCH PRODUCTION SCHEMA
     await supabaseAdmin.from("messages").insert({
         user_id: flow.merchant_id || conversation.merchant_id,
-        sender_id: flow.merchant_id || conversation.merchant_id, // 👈 REQUIRED
+        sender_id: flow.merchant_id || conversation.merchant_id,
         sender_email: "AI-Assistant",
         sender_name: "Auto-Reply Bot",
         body: reply,
         channel: "facebook",
         status: "replied",
         created_at: new Date().toISOString(),
+        metadata: { conversation_id: conversation.id } // 👈 Store in metadata 
     });
 
     return {
