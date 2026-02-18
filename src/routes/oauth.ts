@@ -114,88 +114,79 @@ router.get("/facebook/callback", async (req, res) => {
             { params: { access_token: longLivedToken } }
         );
 
-        // Limit to 1 page: Take the first page ONLY
-        if (pagesRes.data.data.length > 0) {
-            const page = pagesRes.data.data[0];
+        const pages = pagesRes.data.data || [];
 
-            // Check if ANY other page is connected for this user and remove it (Enforce 1-page rule)
-            await supabaseAdmin
-                .from("platform_connections")
-                .delete()
-                .eq("user_id", userId)
-                .neq("page_id", page.id); // Delete everything EXCEPT the current one (if exists) - actually just delete all and re-insert is safer to ensure clean state
-
-            // Clean slate approach: Delete ALL connections for this user first
-            await supabaseAdmin
-                .from("platform_connections")
-                .delete()
-                .eq("user_id", userId);
-
-            // 🔥 ENSURE MERCHANT EXISTS FIRST (defensive)
-            // If the user registered but the record is missing for some reason, 
-            // the platform_connections insert might fail if there's an RLS policy or FK.
-            const { data: existingMerchant } = await supabaseAdmin
-                .from("merchants")
-                .select("id")
-                .eq("id", userId)
-                .maybeSingle();
-
-            if (!existingMerchant) {
-                console.log("Creating missing merchant record for user:", userId);
-                const { error: merchError } = await supabaseAdmin.from("merchants").insert({
-                    id: userId,
-                    page_id: page.id,
-                    business_name: page.name,
-                    business_type: "shop",
-                    subscription_plan: "shop",
-                    subscription_status: "active",
-                    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                });
-                if (merchError) {
-                    console.error("Failed to create missing merchant:", merchError);
-                    // We continue, but it might lead to RLS/FK errors below
-                }
-            }
-
-            const { error: insertError } = await supabaseAdmin
-                .from("platform_connections")
-                .upsert(
-                    {
-                        user_id: userId,
-                        platform: "facebook",
-                        page_id: page.id,
-                        page_name: page.name,
-                        page_access_token: page.access_token,
-                    },
-                    { onConflict: "user_id,page_id" }
-                );
-
-            if (insertError) {
-                console.error("Insert error in platform_connections:", insertError);
-                if (insertError.message.includes("row-level security policy")) {
-                    console.error("🚨 CRITICAL: RLS Violation detected. Check if SUPABASE_SERVICE_ROLE_KEY is correctly set in production.");
-                    throw new Error("Database Access Error: RLS violation. Please check server configuration (Service Role Key).");
-                }
-                throw insertError;
-            }
-
-            // Update Merchant Profile with Page Info & Business Type (if not set)
-            // Use upsert to handle both new and existing
-            if (existingMerchant) {
-                // Update existing
-                await supabaseAdmin
-                    .from("merchants")
-                    .update({
-                        page_id: page.id,
-                        business_name: page.name, // optional: sync name
-                    })
-                    .eq("id", userId);
-            }
-            // else was handled above in the "ENSURE MERCHANT EXISTS FIRST" block
-
-            // Subscribe Webhook
-            await subscribePageToWebhook(page.id, page.access_token);
+        if (pages.length === 0) {
+            console.error("❌ No Facebook pages found for this user access token.");
+            throw new Error("သင်၏ Facebook အကောင့်တွင် Page မတွေ့ရပါ။ ကျေးဇူးပြု၍ Facebook Login ဝင်စဉ် Page တစ်ခုကို အမှန်ခြစ်ခဲ့ပါသလား ပြန်စစ်ပေးပါ။");
         }
+
+        // Limit to 1 page: Take the first page ONLY
+        const page = pages[0];
+        console.log(`🔗 Connecting Page: ${page.name} (${page.id}) for user: ${userId}`);
+
+        // Check if ANY other page is connected for this user and remove it (Enforce 1-page rule)
+        await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("user_id", userId);
+
+        // 🔥 ENSURE MERCHANT EXISTS FIRST (defensive)
+        const { data: existingMerchant } = await supabaseAdmin
+            .from("merchants")
+            .select("id")
+            .eq("id", userId)
+            .maybeSingle();
+
+        if (!existingMerchant) {
+            console.log("Creating missing merchant record for user:", userId);
+            const { error: merchError } = await supabaseAdmin.from("merchants").insert({
+                id: userId,
+                page_id: page.id,
+                business_name: page.name,
+                business_type: "shop",
+                subscription_plan: "shop",
+                subscription_status: "active",
+                trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            });
+            if (merchError) {
+                console.error("Failed to create missing merchant:", merchError);
+            }
+        }
+
+        const { error: insertError } = await supabaseAdmin
+            .from("platform_connections")
+            .upsert(
+                {
+                    user_id: userId,
+                    platform: "facebook",
+                    page_id: page.id,
+                    page_name: page.name,
+                    page_access_token: page.access_token,
+                },
+                { onConflict: "user_id,page_id" }
+            );
+
+        if (insertError) {
+            console.error("Insert error in platform_connections:", insertError);
+            if (insertError.message.includes("row-level security policy")) {
+                throw new Error("Database Access Error: RLS violation. Please handle this in Supabase.");
+            }
+            throw insertError;
+        }
+
+        // Update Merchant Profile with Page Info
+        await supabaseAdmin
+            .from("merchants")
+            .update({
+                page_id: page.id,
+                business_name: page.name,
+            })
+            .eq("id", userId);
+
+        // Subscribe Webhook
+        console.log(`📡 Subscribing Page ${page.id} to webhooks...`);
+        await subscribePageToWebhook(page.id, page.access_token);
 
         console.log("User ID:", userId);
 
