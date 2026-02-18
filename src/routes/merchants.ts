@@ -41,15 +41,9 @@ router.get("/me", requireAuth, async (req: any, res) => {
         const totalConversations = conversations?.length || 0;
         const completedConversations = conversations?.filter(c => c.status === 'completed').length || 0;
 
-        const { count: ordersCount } = await supabaseAdmin
-            .from("orders")
-            .select("*", { count: "exact", head: true })
-            .eq("merchant_id", userId);
-
-        const { count: shipmentsCount } = await supabaseAdmin
-            .from("shipments")
-            .select("*", { count: "exact", head: true })
-            .eq("merchant_id", userId);
+        // Count queries for orders/shipments (using head:true)
+        const { count: ordersCount } = await supabaseAdmin.from("orders").select("*", { count: "exact", head: true }).eq("merchant_id", userId);
+        const { count: shipmentsCount } = await supabaseAdmin.from("shipments").select("*", { count: "exact", head: true }).eq("merchant_id", userId);
 
         const { data: recentMessages } = await supabaseAdmin
             .from("messages")
@@ -96,8 +90,6 @@ router.patch("/toggle-auto-reply", requireAuth, async (req: any, res) => {
     }
 });
 
-// ─── FLOW CRUD (moved here to bypass requireActiveSubscription) ───
-
 /**
  * GET /api/merchants/flows
  */
@@ -119,14 +111,11 @@ router.get("/flows", requireAuth, async (req: any, res) => {
 
 /**
  * POST /api/merchants/flows
- * Auto-fills business_type from merchant profile
  */
 router.post("/flows", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { name, trigger_keyword, description } = req.body;
-
-        // Auto-fill business_type from merchant profile
         const merchant = await getMerchant(userId);
         const businessType = merchant?.business_type || "online_shop";
 
@@ -181,13 +170,7 @@ router.delete("/flows/:id", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-
-        const { error } = await supabaseAdmin
-            .from("automation_flows")
-            .delete()
-            .eq("id", id)
-            .eq("merchant_id", userId);
-
+        const { error } = await supabaseAdmin.from("automation_flows").delete().eq("id", id).eq("merchant_id", userId);
         if (error) throw error;
         res.json({ success: true });
     } catch (error: any) {
@@ -203,15 +186,7 @@ router.patch("/flows/:id/toggle", requireAuth, async (req: any, res) => {
         const userId = req.user.id;
         const { id } = req.params;
         const { is_active } = req.body;
-
-        const { data, error } = await supabaseAdmin
-            .from("automation_flows")
-            .update({ is_active: !!is_active })
-            .eq("id", id)
-            .eq("merchant_id", userId)
-            .select()
-            .single();
-
+        const { data, error } = await supabaseAdmin.from("automation_flows").update({ is_active: !!is_active }).eq("id", id).eq("merchant_id", userId).select().single();
         if (error) throw error;
         res.json({ success: true, data });
     } catch (error: any) {
@@ -219,28 +194,28 @@ router.patch("/flows/:id/toggle", requireAuth, async (req: any, res) => {
     }
 });
 
-// ─── Orders & Shipments ──────────────────────────────────────────
+// ─── Orders & Shipments (With Column Fallback) ──────────────────
 
 router.get("/orders", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         console.log("📦 Fetching orders for user:", userId);
 
-        const { data, error } = await supabaseAdmin
-            .from("orders")
-            .select("*")
-            .eq("merchant_id", userId)
-            .order("created_at", { ascending: false });
+        // Try merchant_id first
+        let query = await supabaseAdmin.from("orders").select("*").eq("merchant_id", userId).order("created_at", { ascending: false });
 
-        if (error) {
-            console.error("❌ Orders query error:", error);
-            // If table doesn't exist, return empty data instead of error
-            if (error.code === '42P01' || error.message?.includes('does not exist')) {
-                return res.json({ success: true, data: [] });
-            }
-            throw error;
+        // Fallback to user_id if merchant_id is missing
+        if (query.error && (query.error.code === '42703' || query.error.message.includes('merchant_id'))) {
+            console.log("⚠️ Falling back to user_id for orders...");
+            query = await supabaseAdmin.from("orders").select("*").eq("user_id", userId).order("created_at", { ascending: false });
         }
-        res.json({ success: true, data: data || [] });
+
+        if (query.error) {
+            console.error("❌ Orders query error:", query.error);
+            if (query.error.code === '42P01' || query.error.message?.includes('does not exist')) return res.json({ success: true, data: [] });
+            throw query.error;
+        }
+        res.json({ success: true, data: query.data || [] });
     } catch (error: any) {
         console.error("❌ Orders endpoint error:", error);
         res.status(500).json({ error: error.message });
@@ -252,20 +227,21 @@ router.get("/shipments", requireAuth, async (req: any, res) => {
         const userId = req.user.id;
         console.log("🚚 Fetching shipments for user:", userId);
 
-        const { data, error } = await supabaseAdmin
-            .from("shipments")
-            .select("*")
-            .eq("merchant_id", userId)
-            .order("created_at", { ascending: false });
+        // Try merchant_id first
+        let query = await supabaseAdmin.from("shipments").select("*").eq("merchant_id", userId).order("created_at", { ascending: false });
 
-        if (error) {
-            console.error("❌ Shipments query error:", error);
-            if (error.code === '42P01' || error.message?.includes('does not exist')) {
-                return res.json({ success: true, data: [] });
-            }
-            throw error;
+        // Fallback to user_id
+        if (query.error && (query.error.code === '42703' || query.error.message.includes('merchant_id'))) {
+            console.log("⚠️ Falling back to user_id for shipments...");
+            query = await supabaseAdmin.from("shipments").select("*").eq("user_id", userId).order("created_at", { ascending: false });
         }
-        res.json({ success: true, data: data || [] });
+
+        if (query.error) {
+            console.error("❌ Shipments query error:", query.error);
+            if (query.error.code === '42P01' || query.error.message?.includes('does not exist')) return res.json({ success: true, data: [] });
+            throw query.error;
+        }
+        res.json({ success: true, data: query.data || [] });
     } catch (error: any) {
         console.error("❌ Shipments endpoint error:", error);
         res.status(500).json({ error: error.message });

@@ -129,14 +129,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
             if (flowError) console.error("❌ Flow Search Error:", flowError);
 
-            // Flexible Trigger: Check if message contains the trigger keyword
+            // flexible Trigger: Check if message matches any keyword (supports commas)
             const matchedFlow = flows?.find(f => {
-                const keyword = f.trigger_keyword.toLowerCase().trim();
-                return rawMessage.includes(keyword);
+                const keywords = f.trigger_keyword.toLowerCase().split(',').map((k: string) => k.trim());
+                return keywords.some((k: string) => rawMessage.includes(k) && k.length > 0);
             });
 
             if (!matchedFlow) {
-                console.log("🚫 No active flow matched for:", rawMessage);
+                console.log(`🚫 No active flow matched for message: "${rawMessage}" (Active flows found: ${flows?.length || 0})`);
                 // Record orphaned message for visibility
                 await supabaseAdmin.from("messages").insert({
                     user_id: merchantId,
@@ -211,7 +211,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 flow.business_type || 'online_shop',
                 senderName,
                 connection.page_name,
-                
+
             );
             try {
                 await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
