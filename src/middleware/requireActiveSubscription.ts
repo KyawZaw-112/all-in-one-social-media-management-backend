@@ -38,7 +38,7 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                 console.error("❌ CRITICAL: Merchant auto-creation failed for User ID:", userId);
                 console.error("Error Object:", JSON.stringify(createError, null, 2));
                 return res.status(403).json({
-                    error: "Merchant profile missing and creation failed.",
+                    error: `Merchant profile missing and creation failed: ${createError?.message || "Record not returned"}`,
                     details: createError?.message || "Record not returned after upsert",
                     hint: "Please ensure your Supabase user exists and is a valid UUID.",
                     userId: userId
