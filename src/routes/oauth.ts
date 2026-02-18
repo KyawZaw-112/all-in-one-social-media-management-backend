@@ -274,9 +274,13 @@ router.post("/register", async (req, res) => {
 
         /* 2️⃣ Sign In with a TEMPORARY client to get the token (Prevents polluting supabaseAdmin) */
         const { createClient } = await import("@supabase/supabase-js");
-        const tempClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
-            auth: { persistSession: false }
-        });
+        const tempClient = createClient(
+            process.env.SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key as anon key might be missing
+            {
+                auth: { persistSession: false }
+            }
+        );
 
         const { data: sessionData, error: sessionError } = await tempClient.auth.signInWithPassword({
             email,
