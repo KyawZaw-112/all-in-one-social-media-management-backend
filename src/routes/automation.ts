@@ -271,4 +271,38 @@ router.get("/stats", async (req, res) => {
     }
 });
 
+// Get all orders for the merchant
+router.get("/orders", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { data, error } = await supabaseAdmin
+            .from("orders")
+            .select("*")
+            .eq("merchant_id", userId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get all shipments for the merchant
+router.get("/shipments", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { data, error } = await supabaseAdmin
+            .from("shipments")
+            .select("*")
+            .eq("merchant_id", userId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

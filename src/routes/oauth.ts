@@ -3,6 +3,7 @@ import axios from "axios";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { subscribePageToWebhook } from "../services/facebook.services.js";
+import { seedDefaultFlows } from "../services/seed.services.js";
 
 const router = express.Router();
 
@@ -248,8 +249,8 @@ router.post("/register", async (req, res) => {
         if (authError) throw authError;
         if (!authData.user) throw new Error("User creation failed");
 
-        // Use subscription_plan to determine business_type
-        const businessType = subscription_plan === 'cargo' ? 'cargo' : 'shop';
+        // Use explicit business_type or derive from subscription_plan
+        const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'shop');
 
         await supabaseAdmin.from("merchants").insert({
             id: authData.user.id,
@@ -260,6 +261,9 @@ router.post("/register", async (req, res) => {
             trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             subscription_status: 'active'
         });
+
+        // 🔥 Seed default flows
+        await seedDefaultFlows(authData.user.id, businessType);
 
         const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
             email,
