@@ -1,7 +1,7 @@
 import { sendMessage } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response } from "express";
-import { runConversationEngine } from "../services/conversationEngine.js";
+import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../services/conversationEngine.js";
 
 export const verifyWebhook = (req: Request, res: Response) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
@@ -101,6 +101,15 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     channel: "facebook",
                     status: "received"
                 });
+
+                // Send default fallback reply
+                const defaultReply = getDefaultReply();
+                try {
+                    await sendMessage(pageId, connection.page_access_token, senderId, defaultReply);
+                } catch (sendErr) {
+                    console.error("❌ Failed to send default reply:", sendErr);
+                }
+
                 return res.sendStatus(200);
             }
 
@@ -127,6 +136,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
             conversation = newConv;
             console.log("✨ New conversation created:", conversation.id);
+
+            // Send welcome message first
+            const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop');
+            try {
+                await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
+            } catch (welcomeErr) {
+                console.error("⚠️ Welcome message send failed (non-critical):", welcomeErr);
+            }
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
             const { data: existingFlow } = await supabaseAdmin
