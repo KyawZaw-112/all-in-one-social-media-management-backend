@@ -13,7 +13,7 @@ async function cleanup() {
     console.log("🚀 Starting Database Cleanup...");
 
     try {
-        const SEVEN_DAYS_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const ONE_HOUR_AGO = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
 
         // 1. Delete superseded conversations (immediate trash)
         const { count: supersededCount, error: supErr } = await supabaseAdmin
@@ -24,12 +24,12 @@ async function cleanup() {
         if (supErr) console.error("❌ Superseded cleanup error:", supErr.message);
         else console.log(`✅ Deleted ${supersededCount || 0} superseded conversations.`);
 
-        // 2. Delete abandoned conversations (active but older than 7 days)
+        // 2. Delete abandoned conversations (active but older than 1 hour)
         const { count: abandonedCount, error: abanErr } = await supabaseAdmin
             .from("conversations")
             .delete()
             .eq("status", "active")
-            .lt("created_at", SEVEN_DAYS_AGO);
+            .lt("created_at", ONE_HOUR_AGO);
 
         if (abanErr) console.error("❌ Abandoned cleanup error:", abanErr.message);
         else console.log(`✅ Deleted ${abandonedCount || 0} abandoned/stale conversations.`);
