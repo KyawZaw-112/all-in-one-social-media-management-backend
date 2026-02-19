@@ -84,7 +84,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
         // 1.5️⃣ Check Subscription Status
         const { data: merchant, error: merchError } = await supabaseAdmin
             .from("merchants")
-            .select("subscription_status, trial_ends_at")
+            .select("subscription_status, trial_ends_at, business_type")
             .eq("id", merchantId)
             .maybeSingle();
 
@@ -159,11 +159,10 @@ export const handleWebhook = async (req: Request, res: Response) => {
             if (!matchedFlow) {
                 console.log(`🆕 Starting flow selection for message: "${rawMessage}"`);
 
-                const selectionMsg =
-                    "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n" +
-                    "1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n" +
-                    "2️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n\n" +
-                    "(နံပါတ် ၁ သို့မဟုတ် ၂ ကို နှိပ်၍သော်လည်းကောင်း၊ စာသားဖြင့်သော်လည်းကောင်း ရွေးချယ်နိုင်ပါသည်)";
+                const bType = merchant?.business_type || 'online_shop';
+                const selectionMsg = bType === 'cargo'
+                    ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
+                    : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";
 
                 try {
                     const { data: selectConv, error: selectErr } = await supabaseAdmin
@@ -273,10 +272,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     .eq("merchant_id", merchantId)
                     .eq("is_active", true);
 
+                const bType = merchant?.business_type || 'online_shop';
                 let targetType = null;
                 const lowerChoice = choice.toLowerCase();
-                if (choice === '1' || lowerChoice.includes('shop') || lowerChoice.includes('online')) targetType = 'online_shop';
-                else if (choice === '2' || lowerChoice.includes('cargo')) targetType = 'cargo';
+
+                if (choice === '1' || lowerChoice.includes('order') || lowerChoice.includes('cargo') || lowerChoice.includes('မှာ')) {
+                    targetType = bType;
+                } else if (choice === '2' || lowerChoice.includes('admin') || lowerChoice.includes('မင်မင်')) {
+                    console.log("👤 User chose to talk to admin from menu.");
+                    await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
+                    await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
+                    return res.sendStatus(200);
+                }
 
                 if (targetType) {
                     const matched = flows?.find(f => f.business_type === targetType);
