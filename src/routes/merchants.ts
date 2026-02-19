@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { sendMessage } from "../services/facebook.services.js";
 
 const router = Router();
 
@@ -284,6 +285,12 @@ router.patch("/orders/:id/status", requireAuth, async (req: any, res) => {
             .single();
 
         if (error) throw error;
+
+        // 🟢 Automated Facebook Notification for Approved Orders
+        if (status === 'approved' && data?.conversation_id) {
+            handleStatusApproved(data.conversation_id, userId, "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏");
+        }
+
         res.json({ success: true, data });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -310,10 +317,69 @@ router.patch("/shipments/:id/status", requireAuth, async (req: any, res) => {
             .single();
 
         if (error) throw error;
+
+        // 🟢 Automated Facebook Notification for Approved Shipments
+        if (status === 'approved' && data?.conversation_id) {
+            handleStatusApproved(data.conversation_id, userId, "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏");
+        }
+
         res.json({ success: true, data });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 });
+
+/**
+ * Helper: Send Facebook message when order/shipment status is approved
+ */
+async function handleStatusApproved(conversationId: string, merchantId: string, message: string) {
+    try {
+        console.log(`📡 Sending automated approval message for conversation: ${conversationId}`);
+
+        // 1. Get Conversation Data
+        const { data: conv } = await supabaseAdmin
+            .from("conversations")
+            .select("user_psid, page_id")
+            .eq("id", conversationId)
+            .maybeSingle();
+
+        if (!conv?.user_psid || !conv?.page_id) {
+            console.log("⚠️ Could not find PSID or Page ID for automated message.");
+            return;
+        }
+
+        // 2. Get Page Access Token
+        const { data: conn } = await supabaseAdmin
+            .from("platform_connections")
+            .select("page_access_token")
+            .eq("platform_page_id", conv.page_id)
+            .maybeSingle();
+
+        if (!conn?.page_access_token) {
+            console.log("⚠️ Could not find Page Access Token for automated message.");
+            return;
+        }
+
+        // 3. Send Message
+        await sendMessage(conv.page_id, conn.page_access_token, conv.user_psid, message);
+        console.log("✅ Automated approval message sent successfully.");
+
+        // 4. Log to Messages table
+        await supabaseAdmin.from("messages").insert({
+            user_id: merchantId,
+            sender_id: merchantId,
+            sender_email: "AI-Assistant",
+            sender_name: "Auto-Reply Bot",
+            body: message,
+            channel: "facebook",
+            status: "replied",
+            conversation_id: conversationId,
+            created_at: new Date().toISOString()
+        });
+
+    } catch (err) {
+        console.error("❌ Failed to send automated approval message:", err);
+    }
+}
 
 export default router;
