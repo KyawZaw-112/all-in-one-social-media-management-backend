@@ -251,7 +251,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     sender_email: "AI-Assistant",
                     sender_name: "Auto-Reply Bot",
                     body: welcomeMsg,
-                    content: welcomeMsg, // Standardized
                     channel: "facebook",
                     status: "replied",
                     conversation_id: conversation.id
@@ -341,6 +340,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     // Update conversation with new flow_id
                     await supabaseAdmin.from("conversations").update({ flow_id: flow.id }).eq("id", conversation.id);
                     isResuming = false;
+                } else {
                     const bType = merchant?.business_type || 'online_shop';
                     const selectionMsg = bType === 'cargo'
                         ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
@@ -423,8 +423,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
             console.log("🏁 Webhook processing finished successfully.");
 
             return res.sendStatus(200);
-        } catch (error) {
-            console.error("🔴 GLOBAL WEBHOOK ERROR:", error);
-            return res.sendStatus(500);
         }
-    };
+    } catch (error) {
+        console.error("🔴 GLOBAL WEBHOOK ERROR:", error);
+        return res.sendStatus(500);
+    }
+};
