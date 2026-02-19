@@ -118,44 +118,13 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             question: "ဆက်သွယ်ရန် ဖုန်းနံပါတ် ထည့်ပေးပါ 📞",
             validation: (v) => v.replace(/[\s\-]/g, '').length >= 6,
         },
-        {
-            field: "payment",
-            question:
-                "ငွေပေးချေနည်း ရွေးပါ 💳\n\n" +
-                "1️⃣ 📱 KPay\n" +
-                "2️⃣ 📱 Wave Pay\n" +
-                "3️⃣ 🏦 Bank Transfer\n" +
-                "4️⃣ 💵 COD (လက်ခံပြီးမှပေး)",
-            options: [
-                { label: "KPay", value: "KPay" },
-                { label: "WavePay", value: "WavePay" },
-                { label: "Bank", value: "Bank Transfer" },
-                { label: "COD", value: "COD" },
-            ],
-            validation: (v) => {
-                const n = parseInt(v);
-                return (n >= 1 && n <= 4) ||
-                    ["kpay", "wave", "bank", "cod", "ငွေ", "လွှဲ"].some(k => v.toLowerCase().includes(k));
-            },
-            transform: (v) => {
-                const n = parseInt(v);
-                const map: Record<number, string> = { 1: "KPay", 2: "WavePay", 3: "Bank Transfer", 4: "COD" };
-                if (map[n]) return map[n];
-                const lower = v.toLowerCase();
-                if (lower.includes("kpay")) return "KPay";
-                if (lower.includes("wave")) return "WavePay";
-                if (lower.includes("bank") || lower.includes("ဘဏ်")) return "Bank Transfer";
-                if (lower.includes("cod") || lower.includes("လက်ခံ")) return "COD";
-                return v;
-            },
-        },
     ],
     completionMessage: (d, orderNo) => {
         const pickupMsg = d.delivery === "Pickup"
             ? "✅ Self Pickup ရွေးချယ်ထားပါသည်\n📍 ဆိုင်လိပ်စာ Admin မှ ဆက်သွယ်ပေးပါမည်"
             : `📍 လိပ်စာ      : ${d.address}`;
 
-        let summary =
+        return (
             "🎉 Order လက်ခံပြီးပါပြီ!\n\n" +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
             "🛍️ ORDER အချက်အလက်\n" +
@@ -170,23 +139,10 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
             `👤 နာမည်       : ${d.full_name}\n` +
             `📞 ဖုန်း       : ${d.phone}\n` +
-            `💳 ငွေပေးချေ   : ${d.payment}\n` +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
-            `⏰ တုံ့ပြန်ချိန်: ၁-၂ နာရီ (ရုံးချိန်)\n`;
-
-        if (d.payment === "COD") {
-            summary +=
-                "\n✅ COD Order အတည်ပြုပြီးပါပြီ\n" +
-                "ပစ္စည်းရောက်မှ ငွေပေးဆောင်ပါ 💵\n" +
-                "Delivery ကြေး သီးခြားပါမည်";
-        } else {
-            summary +=
-                "\n💳 Admin မှ ငွေလွှဲရမည့် Account No\n" +
-                "ဆက်သွယ်ပေးပါမည် 🙏\n" +
-                "⚠️ ငွေလွှဲပြီးပါက Screenshot ပို့ပေးပါ";
-        }
-
-        return summary;
+            `⏰ တုံ့ပြန်ချိန်: ၁-၂ နာရီ (ရုံးချိန်)\n\n` +
+            "Admin မှ Viber/Messenger ဖြင့်\nဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏"
+        );
     },
     incompleteMessage: "📝 ဆက်ဖြေပေးပါ။ Please continue...",
 };

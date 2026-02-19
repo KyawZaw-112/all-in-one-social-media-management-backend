@@ -80,7 +80,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             return res.sendStatus(200);
         }
 
-        // 1.5️⃣ Check Subscription Status
+        // 1.5️⃣ Check Subscription Status (Disabled as per user request to let page owner handle)
         const { data: merchant, error: merchError } = await supabaseAdmin
             .from("merchants")
             .select("subscription_status, trial_ends_at, business_type")
@@ -88,19 +88,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .maybeSingle();
 
         if (merchError) console.error("❌ Merchant Search Error:", merchError);
-
-        if (merchant) {
-            const now = new Date();
-            const trialEnd = merchant.trial_ends_at ? new Date(merchant.trial_ends_at) : null;
-            const isExpired = merchant.subscription_status === 'expired' || (trialEnd && trialEnd < now);
-
-            if (isExpired && merchant.subscription_status !== 'active') {
-                console.log("⚠️ Subscription expired for merchant:", merchantId);
-                // Optional: Send a one-time expiration message? 
-                // For now, just ignore to save costs/API limits.
-                return res.sendStatus(200);
-            }
-        }
 
         // 2️⃣ Check for active conversation
         let isResuming = true;
@@ -344,7 +331,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 console.log("🎉 Conversation Complete. Saving results...");
                 const businessType = result.business_type || flow.business_type || 'online_shop';
 
-                // Clean tempData: remove internal fields starting with "_" (like _order_no)
+                // Clean tempData: remove internal fields starting with "_"
+                // and map common fields to ensure database compatibility
                 const cleanData = Object.keys(result.temp_data || {}).reduce((acc: any, key) => {
                     if (!key.startsWith('_')) {
                         acc[key] = result.temp_data[key];
@@ -352,8 +340,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     return acc;
                 }, {});
 
+                // Force mapping for common fields if missing
+                if (cleanData.payment && !cleanData.payment_method) {
+                    cleanData.payment_method = cleanData.payment;
+                }
+
                 if (businessType === 'cargo') {
-                    console.log("📦 Saving Shipment Request:", cleanData);
+                    console.log(`📦 Saving Shipment Request for merchant ${merchantId}:`, cleanData);
                     const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
@@ -361,17 +354,23 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         status: "pending",
                     });
                     if (shipErr) {
-                        console.error("❌ Shipment Insertion Failed:", shipErr);
+                        console.error("❌ Shipment Insertion Failed:", shipErr.message, shipErr.details);
+                    } else {
+                        console.log("✅ Shipment saved successfully.");
                     }
                 } else {
-                    console.log("🛍️ Saving Order:", cleanData);
+                    console.log(`🛍️ Saving Order for merchant ${merchantId}:`, cleanData);
                     const { error: orderErr } = await supabaseAdmin.from("orders").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
                         ...cleanData,
                         status: "pending",
                     });
-                    if (orderErr) console.error("❌ Order Insertion Failed:", orderErr);
+                    if (orderErr) {
+                        console.error("❌ Order Insertion Failed:", orderErr.message, orderErr.details);
+                    } else {
+                        console.log("✅ Order saved successfully.");
+                    }
                 }
 
                 await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
