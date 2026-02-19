@@ -294,10 +294,16 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             flow_id: flow.id,
                             temp_data: {}
                         }).eq("id", conversation.id);
+
+                        // 🛠️ Update local object to avoid stale data in engine
+                        conversation.flow_id = flow.id;
+                        conversation.temp_data = {};
                         isResuming = false; // Start fresh with the new flow
                     }
                 } else {
-                    const selectionMsg = "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop 🛍️\n2️⃣ Cargo 📦";
+                    const selectionMsg = bType === 'cargo'
+                        ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
+                        : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";
                     await sendMessage(pageId, connection.page_access_token, senderId, selectionMsg);
                     return res.sendStatus(200);
                 }
