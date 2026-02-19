@@ -350,6 +350,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
+                        page_id: pageId,
                         ...cleanData,
                         status: "pending",
                     });
@@ -363,6 +364,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     const { error: orderErr } = await supabaseAdmin.from("orders").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
+                        page_id: pageId,
                         ...cleanData,
                         status: "pending",
                     });
