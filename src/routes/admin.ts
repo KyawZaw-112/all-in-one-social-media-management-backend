@@ -120,26 +120,31 @@ router.get("/system-stats", async (req, res) => {
  */
 router.get("/merchants", async (req, res) => {
     try {
+        console.log("📊 [Admin] Fetching merchants...");
         // 1. Fetch Merchants
         const { data: merchants, error: mError } = await supabaseAdmin
             .from("merchants")
             .select("*")
             .order("created_at", { ascending: false });
 
+        console.log("📊 [Admin] Merchants query result:", { count: merchants?.length, error: mError?.message });
+
         if (mError) throw mError;
 
         // 2. Fetch Users from Auth to get emails
         const { data: { users }, error: uError } = await supabaseAdmin.auth.admin.listUsers();
+        console.log("📊 [Admin] Auth users count:", users?.length, "error:", uError?.message);
         if (uError) throw uError;
 
         // 3. Map emails to merchants
-        const enrichedMerchants = merchants.map(m => ({
+        const enrichedMerchants = (merchants || []).map(m => ({
             ...m,
             user: {
                 email: users.find(u => u.id === m.id)?.email || "Unknown"
             }
         }));
 
+        console.log("📊 [Admin] Returning", enrichedMerchants.length, "merchants");
         res.json({ success: true, data: enrichedMerchants });
     } catch (error: any) {
         console.error("Merchants Fetch Error:", error);
