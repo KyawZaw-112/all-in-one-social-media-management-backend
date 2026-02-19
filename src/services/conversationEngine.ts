@@ -118,6 +118,11 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             question: "ဆက်သွယ်ရန် ဖုန်းနံပါတ် ထည့်ပေးပါ 📞",
             validation: (v) => v.replace(/[\s\-]/g, '').length >= 6,
         },
+        {
+            field: "notes",
+            question: "KPay ဖြင့် ငွေလွှဲမည်ဆိုပါက\nPayment Note (သို့မဟုတ်) နောက်ဆုံးဂဏန်း ၆ လုံး\nရေးပေးပါ 📝\n\n(မရှိပါက \"မရှိ\" ဟု ရိုက်ပါ)",
+            validation: (v) => v.trim().length > 0,
+        },
     ],
     completionMessage: (d, orderNo) => {
         const pickupMsg = d.delivery === "Pickup"
@@ -139,6 +144,7 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
             `👤 နာမည်       : ${d.full_name}\n` +
             `📞 ဖုန်း       : ${d.phone}\n` +
+            `📝 Note/KPay  : ${d.notes}\n` +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
             `⏰ တုံ့ပြန်ချိန်: ၁-၂ နာရီ (ရုံးချိန်)\n\n` +
             "Admin မှ Viber/Messenger ဖြင့်\nဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏"
