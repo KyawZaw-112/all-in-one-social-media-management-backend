@@ -266,6 +266,64 @@ router.get("/debug-schema", requireAuth, async (req: any, res) => {
 });
 
 /**
+ * PATCH /api/merchants/orders/:id — Edit order details
+ */
+router.patch("/orders/:id", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const allowedFields = ['full_name', 'phone', 'address', 'item_name', 'item_variant', 'quantity', 'delivery', 'payment_method', 'notes', 'status'];
+        const updates: any = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) updates[key] = req.body[key];
+        }
+        updates.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabaseAdmin
+            .from("orders")
+            .update(updates)
+            .eq("id", id)
+            .eq("merchant_id", userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * PATCH /api/merchants/shipments/:id — Edit shipment details
+ */
+router.patch("/shipments/:id", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const allowedFields = ['full_name', 'phone', 'address', 'country', 'shipping', 'item_type', 'item_name', 'weight', 'item_value', 'notes', 'status'];
+        const updates: any = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) updates[key] = req.body[key];
+        }
+        updates.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabaseAdmin
+            .from("shipments")
+            .update(updates)
+            .eq("id", id)
+            .eq("merchant_id", userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * PATCH /api/merchants/orders/:id/status
  */
 router.patch("/orders/:id/status", requireAuth, async (req: any, res) => {
