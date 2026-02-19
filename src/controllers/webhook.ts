@@ -301,27 +301,32 @@ export const handleWebhook = async (req: Request, res: Response) => {
         if (result.order_complete) {
             console.log("🎉 Conversation Complete. Saving results...");
             const businessType = result.business_type || flow.business_type || 'online_shop';
-            const tempData = result.temp_data || {};
+
+            // Clean tempData: remove internal fields starting with "_" (like _order_no)
+            const cleanData = Object.keys(result.temp_data || {}).reduce((acc: any, key) => {
+                if (!key.startsWith('_')) {
+                    acc[key] = result.temp_data[key];
+                }
+                return acc;
+            }, {});
 
             if (businessType === 'cargo') {
-                console.log("📦 Saving Shipment Request:", tempData);
+                console.log("📦 Saving Shipment Request:", cleanData);
                 const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
                     merchant_id: merchantId,
                     conversation_id: conversation.id,
-                    ...tempData,
+                    ...cleanData,
                     status: "pending",
                 });
                 if (shipErr) {
                     console.error("❌ Shipment Insertion Failed:", shipErr);
-                    // Critical: if the specific table insert fails, don't mark conversation as completed yet
-                    // or at least log why it failed.
                 }
             } else {
-                console.log("🛍️ Saving Order:", tempData);
+                console.log("🛍️ Saving Order:", cleanData);
                 const { error: orderErr } = await supabaseAdmin.from("orders").insert({
                     merchant_id: merchantId,
                     conversation_id: conversation.id,
-                    ...tempData,
+                    ...cleanData,
                     status: "pending",
                 });
                 if (orderErr) console.error("❌ Order Insertion Failed:", orderErr);
