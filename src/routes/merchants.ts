@@ -264,4 +264,56 @@ router.get("/debug-schema", requireAuth, async (req: any, res) => {
     }
 });
 
+/**
+ * PATCH /api/merchants/orders/:id/status
+ */
+router.patch("/orders/:id/status", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) return res.status(400).json({ error: "Status is required" });
+
+        const { data, error } = await supabaseAdmin
+            .from("orders")
+            .update({ status })
+            .eq("id", id)
+            .eq("merchant_id", userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * PATCH /api/merchants/shipments/:id/status
+ */
+router.patch("/shipments/:id/status", requireAuth, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) return res.status(400).json({ error: "Status is required" });
+
+        const { data, error } = await supabaseAdmin
+            .from("shipments")
+            .update({ status })
+            .eq("id", id)
+            .eq("merchant_id", userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
