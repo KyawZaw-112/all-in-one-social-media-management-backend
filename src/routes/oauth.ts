@@ -140,8 +140,8 @@ router.get("/facebook/callback", async (req, res) => {
                 id: userId,
                 page_id: page.id,
                 business_name: page.name,
-                business_type: "shop", // Default if record is missing entirely
-                subscription_plan: "shop",
+                business_type: "online_shop", // Default if record is missing entirely
+                subscription_plan: "online_shop",
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
@@ -249,14 +249,14 @@ router.post("/register", async (req, res) => {
         if (!authData.user) throw new Error("User creation failed");
 
         // Use explicit business_type or derive from subscription_plan
-        const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'shop');
+        const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'online_shop');
 
         console.log("🏪 Creating merchant profile for user:", authData.user.id);
         const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
             id: authData.user.id,
             page_id: `pending-${authData.user.id}`, // Unique placeholder to satisfy NOT NULL & UNIQUE
             business_name: `${name}'s Business`,
-            subscription_plan: subscription_plan || 'shop',
+            subscription_plan: subscription_plan || 'online_shop',
             business_type: businessType, // Save business type
             trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             subscription_status: 'active'

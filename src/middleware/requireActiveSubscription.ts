@@ -27,7 +27,7 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
                     page_id: `pending_${userId.substring(0, 8)}`,
                     business_name: "My Business",
                     business_type: "online_shop",
-                    subscription_plan: "shop",
+                    subscription_plan: "online_shop",
                     subscription_status: "active",
                     trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
                 }, { onConflict: "id", ignoreDuplicates: false })

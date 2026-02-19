@@ -1,29 +1,30 @@
-import dotenv from "dotenv";
-dotenv.config({ path: "./.env" });
+import "dotenv/config";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 
 async function checkFlows() {
-    const merchantId = "40b42079-6636-4b09-b9c9-db9ec0d40b75";
-    console.log(`🔍 Checking automation flows for merchant: ${merchantId}...`);
+    const merchantId = 'c8ef74b5-8c87-4e08-b0dc-7f8ae48d267c';
 
-    const { data, error } = await supabaseAdmin
+    console.log(`🔍 Checking flows for merchant: ${merchantId}`);
+
+    const { data: flows, error } = await supabaseAdmin
         .from("automation_flows")
         .select("*")
         .eq("merchant_id", merchantId);
 
     if (error) {
-        console.error("❌ Error:", error);
+        console.error("❌ Error fetching flows:", error);
         return;
     }
 
-    if (!data || data.length === 0) {
-        console.log("ℹ️ No flows found.");
-    } else {
-        console.log(`✅ Found ${data.length} flows:`);
-        data.forEach(f => {
-            console.log(`- Flow: ${f.name} | Keyword: '${f.trigger_keyword}' | Active: ${f.is_active} | Business: ${f.business_type}`);
-        });
-    }
+    console.log("Flows found:", JSON.stringify(flows, null, 2));
+
+    const { data: merchant } = await supabaseAdmin
+        .from("merchants")
+        .select("business_type")
+        .eq("id", merchantId)
+        .single();
+
+    console.log("Merchant Business Type:", merchant?.business_type);
 }
 
 checkFlows().catch(console.error);

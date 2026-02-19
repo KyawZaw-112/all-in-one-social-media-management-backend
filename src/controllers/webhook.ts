@@ -156,49 +156,26 @@ export const handleWebhook = async (req: Request, res: Response) => {
             });
 
             if (!matchedFlow) {
-                console.log(`🆕 Starting flow selection for message: "${rawMessage}"`);
+                console.log(`🆕 Attempting auto-start for message: "${rawMessage}"`);
 
-                const bType = merchant?.business_type || 'online_shop';
-                const selectionMsg = bType === 'cargo'
-                    ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
-                    : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";
+                let bType = merchant?.business_type || 'online_shop';
+                if (bType === 'shop') bType = 'online_shop';
 
-                try {
-                    const { data: selectConv, error: selectErr } = await supabaseAdmin
-                        .from("conversations")
-                        .insert({
-                            merchant_id: merchantId,
-                            page_id: pageId,
-                            user_psid: senderId,
-                            temp_data: { _state: 'selecting_type' },
-                            status: "active",
-                        })
-                        .select()
-                        .single();
-
-                    if (selectErr) throw selectErr;
-
-                    await sendMessage(pageId, connection.page_access_token, senderId, selectionMsg);
-
-                    // Record selection message
-                    await supabaseAdmin.from("messages").insert({
-                        user_id: merchantId,
-                        sender_id: merchantId,
-                        sender_email: "AI-Assistant",
-                        sender_name: "Auto-Reply Bot",
-                        body: selectionMsg,
-                        channel: "facebook",
-                        status: "replied",
-                        conversation_id: selectConv.id
-                    });
-                } catch (err) {
-                    console.error("❌ Failed to initialize flow selection:", err);
+                const autoMatched = flows?.find(f => f.business_type === bType);
+                if (autoMatched) {
+                    flow = autoMatched;
+                    console.log("✅ Auto-matched Flow by Type:", flow.name);
+                } else if (flows && flows.length > 0) {
+                    flow = flows[0];
+                    console.log("✅ Fallback to first flow:", flow.name);
+                } else {
+                    console.log("🚫 No flows available for auto-start.");
+                    return res.sendStatus(200);
                 }
-
-                return res.sendStatus(200);
+            } else {
+                flow = matchedFlow;
             }
 
-            flow = matchedFlow;
             console.log("✅ Matched Flow:", flow.name, "ID:", flow.id, "triggered by:", rawMessage);
 
             const { data: newConv, error: createError } = await supabaseAdmin
@@ -261,49 +238,31 @@ export const handleWebhook = async (req: Request, res: Response) => {
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
 
-            // 🟢 Handle Flow Selection State
+            // 🟢 Migration Handle: If conversation was in 'selecting_type', auto-match it now
             if (conversation.temp_data?._state === 'selecting_type') {
-                const choice = messageText.trim();
+                console.log("🛠️ Migrating orphaned selection state to auto-flow...");
+
                 const { data: flows } = await supabaseAdmin
                     .from("automation_flows")
                     .select("*")
                     .eq("merchant_id", merchantId)
                     .eq("is_active", true);
 
-                const bType = merchant?.business_type || 'online_shop';
-                let targetType = null;
-                const lowerChoice = choice.toLowerCase();
+                let bType = merchant?.business_type || 'online_shop';
+                if (bType === 'shop') bType = 'online_shop';
 
-                if (choice === '1' || lowerChoice.includes('order') || lowerChoice.includes('cargo') || lowerChoice.includes('မှာ')) {
-                    targetType = bType;
-                } else if (choice === '2' || lowerChoice.includes('admin') || lowerChoice.includes('မင်မင်')) {
-                    console.log("👤 User chose to talk to admin from menu.");
-                    await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
-                    await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
-                    return res.sendStatus(200);
-                }
+                const matched = flows?.find(f => f.business_type === bType) || flows?.[0];
 
-                if (targetType) {
-                    const matched = flows?.find(f => f.business_type === targetType);
-                    if (matched) {
-                        console.log(`✅ Selected business type: ${targetType}. Starting flow: ${matched.name}`);
-                        flow = matched;
-                        await supabaseAdmin.from("conversations").update({
-                            flow_id: flow.id,
-                            temp_data: {}
-                        }).eq("id", conversation.id);
+                if (matched) {
+                    flow = matched;
+                    await supabaseAdmin.from("conversations").update({
+                        flow_id: flow.id,
+                        temp_data: {}
+                    }).eq("id", conversation.id);
 
-                        // 🛠️ Update local object to avoid stale data in engine
-                        conversation.flow_id = flow.id;
-                        conversation.temp_data = {};
-                        isResuming = false; // Start fresh with the new flow
-                    }
-                } else {
-                    const selectionMsg = bType === 'cargo'
-                        ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
-                        : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";
-                    await sendMessage(pageId, connection.page_access_token, senderId, selectionMsg);
-                    return res.sendStatus(200);
+                    conversation.flow_id = flow.id;
+                    conversation.temp_data = {};
+                    isResuming = false; // Start fresh
                 }
             }
 
@@ -341,7 +300,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     await supabaseAdmin.from("conversations").update({ flow_id: flow.id }).eq("id", conversation.id);
                     isResuming = false;
                 } else {
-                    const bType = merchant?.business_type || 'online_shop';
+                    let bType = merchant?.business_type || 'online_shop';
+                    if (bType === 'shop') bType = 'online_shop';
                     const selectionMsg = bType === 'cargo'
                         ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
                         : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";

@@ -95,7 +95,7 @@ router.get("/system-stats", async (req, res) => {
             activeSubs: merchants.filter(m => m.subscription_status === 'active').length,
             expiredSubs: merchants.filter(m => m.subscription_status === 'expired').length,
             planDistribution: {
-                shop: merchants.filter(m => m.subscription_plan === 'shop').length,
+                online_shop: merchants.filter(m => m.subscription_plan === 'online_shop' || m.subscription_plan === 'shop').length,
                 cargo: merchants.filter(m => m.subscription_plan === 'cargo').length,
             },
             monthlyRevenue: monthlyRevenue,
@@ -178,7 +178,7 @@ router.put("/merchants/:id/subscription", async (req, res) => {
  */
 router.post("/merchants", async (req, res) => {
     try {
-        const { email, password, name, role = "user", plan = "shop" } = req.body;
+        const { email, password, name, role = "user", plan = "online_shop" } = req.body;
 
         if (!email || !password || !name) {
             return res.status(400).json({ error: "Name, email and password are required" });
