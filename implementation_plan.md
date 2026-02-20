@@ -67,6 +67,9 @@ You are a cargo/shipping assistant. Extract shipment information:
 - Handle business-specific order creation
 - **NEW**: Implement column filtering to prevent insertion errors when `temp_data` contains fields (like `item_photos`) not yet in the DB.
 - **NEW**: Add `item_photos` JSONB column to `orders` and `shipments` tables.
+- **NEW**: Add Message Deduplication using Facebook `mid` to prevent duplicate bot replies.
+- **NEW**: Ensure `res.sendStatus(200)` is called for all code paths to prevent Facebook retries.
+- **NEW**: Fix logic to process the initial trigger message immediately after the welcome message.
 
 ---
 

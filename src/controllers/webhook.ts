@@ -37,12 +37,32 @@ export const handleWebhook = async (req: Request, res: Response) => {
         const senderId = messaging?.sender?.id;
         const messageText = messaging?.message?.text || "";
         const attachments = messaging?.message?.attachments || [];
+        const mid = messaging?.message?.mid;
 
-        console.log("📝 Parsed Webhook Data:", { pageId, senderId, messageText: messageText?.substring(0, 20), attachmentCount: attachments.length });
+        console.log("📝 Parsed Webhook Data:", { pageId, senderId, mid, messageText: messageText?.substring(0, 20), attachmentCount: attachments.length });
 
         if (!pageId || !senderId || (!messageText && attachments.length === 0)) {
             console.log("⚠️ Missing required data (pageId/senderId/messageText/attachments)");
             return res.sendStatus(200);
+        }
+
+        // 0️⃣ DEDUPLICATION & EARLY RESPONSE
+        // Send 200 OK immediately to satisfy Facebook and prevent retries
+        res.sendStatus(200);
+
+        if (mid) {
+            // Check if we've already processed this message ID
+            // We store mid in metadata.fb_mid
+            const { data: existingMsg } = await supabaseAdmin
+                .from("messages")
+                .select("id")
+                .contains('metadata', { fb_mid: mid })
+                .maybeSingle();
+
+            if (existingMsg) {
+                console.log("🛑 Duplicate mid detected, skipping processing:", mid);
+                return;
+            }
         }
 
         // 1️⃣ Find merchant connection
@@ -76,12 +96,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 sender_email: senderId,
                 sender_name: "Facebook User",
                 body: messageText,
+                content: messageText,
                 channel: "facebook",
-                status: "received"
+                status: "received",
+                metadata: { fb_mid: mid }
             });
             // Send a small confirmation that admin is notified (optional, but good UX)
             await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
-            return res.sendStatus(200);
+            return;
         }
 
         // 1.5️⃣ Check Subscription Status (Disabled as per user request to let page owner handle)
@@ -161,7 +183,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     console.log("✅ Fallback to first flow:", flow.name);
                 } else {
                     console.log("🚫 No flows available for auto-start.");
-                    return res.sendStatus(200);
+                    return;
                 }
             } else {
                 flow = matchedFlow;
@@ -184,7 +206,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
             if (createError) {
                 logger.error("❌ Failed to create conversation", createError, { merchantId, senderId, flowId: flow.id });
-                return res.sendStatus(200);
+                return;
             }
 
             conversation = newConv;
@@ -219,6 +241,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     sender_email: "AI-Assistant",
                     sender_name: "Auto-Reply Bot",
                     body: welcomeMsg,
+                    content: welcomeMsg,
                     channel: "facebook",
                     status: "replied",
                     conversation_id: conversation.id
@@ -226,6 +249,23 @@ export const handleWebhook = async (req: Request, res: Response) => {
             } catch (welcomeErr) {
                 logger.warn("⚠️ Welcome message send failed (non-critical)", welcomeErr);
             }
+
+            // Record trigger message for new conversation (so engine sees it)
+            await supabaseAdmin.from("messages").insert({
+                user_id: merchantId,
+                sender_id: senderId,
+                sender_email: senderId,
+                sender_name: "Facebook User",
+                body: messageText,
+                content: messageText,
+                channel: "facebook",
+                status: "received",
+                conversation_id: conversation.id,
+                metadata: { conversation_id: conversation.id, fb_mid: mid }
+            });
+
+            // Transition to engine logic immediately for first question
+            isResuming = true;
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
 
@@ -302,126 +342,115 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     }).eq("id", conversation.id);
 
                     await sendMessage(pageId, connection.page_access_token, senderId, selectionMsg);
-                    return res.sendStatus(200);
+                    return;
                 }
             }
 
-            // 4.5 Record incoming message
-            const { error: msgErr } = await supabaseAdmin.from("messages").insert({
-                user_id: merchantId,
-                sender_id: senderId,
-                sender_email: senderId,
-                sender_name: "Facebook User",
-                body: messageText,
-                content: messageText, // for compatibility
-                channel: "facebook",
-                status: "received",
-                conversation_id: conversation?.id,
-                metadata: { conversation_id: conversation?.id }
-            });
-            if (msgErr) logger.error("❌ Failed to record linked message", msgErr, { merchantId, conversationId: conversation?.id });
+            // 4.5 Record incoming message (for Resume path)
+            const { data: recordedMsg } = await supabaseAdmin
+                .from("messages")
+                .select("id")
+                .match({ conversation_id: conversation.id, status: 'received' })
+                .contains('metadata', { fb_mid: mid })
+                .maybeSingle();
 
-            if (!conversation || !flow) {
-                logger.error("💥 Critical: Conversation or flow is null after initialization", null, { conversation, flow });
-                return res.sendStatus(200);
+            if (!recordedMsg) {
+                const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: senderId,
+                    sender_email: senderId,
+                    sender_name: "Facebook User",
+                    body: messageText,
+                    content: messageText,
+                    channel: "facebook",
+                    status: "received",
+                    conversation_id: conversation?.id,
+                    metadata: { conversation_id: conversation?.id, fb_mid: mid }
+                });
+                if (msgErr) logger.error("❌ Failed to record linked message", msgErr, { merchantId, conversationId: conversation?.id });
             }
-
-            // 5️⃣ Run conversation engine
-            console.log("⚙️ Running Conversation Engine. Resuming:", isResuming);
-            const result = await runConversationEngine(conversation, messageText, flow, attachments, isResuming);
-            console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
-
-            // 6️⃣ Completion Logic
-            if (result.order_complete) {
-                console.log("🎉 Conversation Complete. Saving results...");
-                const businessType = result.business_type || flow.business_type || 'online_shop';
-
-                // Clean tempData: remove internal fields starting with "_"
-                // and map common fields to ensure database compatibility
-                const cleanData = Object.keys(result.temp_data || {}).reduce((acc: any, key) => {
-                    if (!key.startsWith('_')) {
-                        acc[key] = result.temp_data[key];
-                    }
-                    return acc;
-                }, {});
-
-                // Force mapping for common fields if missing
-                if (cleanData.payment && !cleanData.payment_method) {
-                    cleanData.payment_method = cleanData.payment;
-                }
-
-                if (businessType === 'cargo') {
-                    console.log(`📦 Saving Shipment Request for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
-                    const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
-                        merchant_id: merchantId,
-                        conversation_id: conversation.id,
-                        page_id: pageId,
-                        order_no: result.temp_data.order_no,
-                        ...cleanData,
-                        status: "pending",
-                    });
-
-                    if (shipErr && shipErr.message.includes('column') && shipErr.message.includes('does not exist')) {
-                        console.warn("⚠️ Shipments insertion failed due to missing column, retrying without item_photos...");
-                        const { item_photos, ...safeData } = cleanData;
-                        const { error: retryErr } = await supabaseAdmin.from("shipments").insert({
-                            merchant_id: merchantId,
-                            conversation_id: conversation.id,
-                            page_id: pageId,
-                            order_no: result.temp_data.order_no,
-                            ...safeData,
-                            status: "pending",
-                        });
-                        if (retryErr) logger.error("❌ Shipment Retry Failed", retryErr);
-                        else console.log("✅ Shipment saved successfully (without photos).");
-                    } else if (shipErr) {
-                        logger.error("❌ Shipment Insertion Failed", shipErr, { merchantId, conversationId: conversation.id });
-                    } else {
-                        console.log("✅ Shipment saved successfully.");
-                    }
-                } else {
-                    console.log(`🛍️ Saving Order for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
-                    const { error: orderErr } = await supabaseAdmin.from("orders").insert({
-                        merchant_id: merchantId,
-                        conversation_id: conversation.id,
-                        page_id: pageId,
-                        order_no: result.temp_data.order_no,
-                        ...cleanData,
-                        status: "pending",
-                    });
-
-                    if (orderErr && orderErr.message.includes('column') && orderErr.message.includes('does not exist')) {
-                        console.warn("⚠️ Orders insertion failed due to missing column, retrying without item_photos...");
-                        const { item_photos, ...safeData } = cleanData;
-                        const { error: retryErr } = await supabaseAdmin.from("orders").insert({
-                            merchant_id: merchantId,
-                            conversation_id: conversation.id,
-                            page_id: pageId,
-                            order_no: result.temp_data.order_no,
-                            ...safeData,
-                            status: "pending",
-                        });
-                        if (retryErr) logger.error("❌ Order Retry Failed", retryErr);
-                        else console.log("✅ Order saved successfully (without photos).");
-                    } else if (orderErr) {
-                        logger.error("❌ Order Insertion Failed", orderErr, { merchantId, conversationId: conversation.id });
-                    } else {
-                        console.log("✅ Order saved successfully.");
-                    }
-                }
-
-                await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
-            }
-
-            // 7️⃣ Send Reply
-            console.log("📤 Sending reply to Facebook...");
-            await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
-            console.log("🏁 Webhook processing finished successfully.");
-
-            return res.sendStatus(200);
         }
+
+        if (!conversation || !flow) {
+            logger.error("💥 Critical: Conversation or flow is null after initialization", null, { conversation, flow });
+            return;
+        }
+
+        // 5️⃣ Run conversation engine
+        console.log("⚙️ Running Conversation Engine. Resuming:", isResuming);
+        const result = await runConversationEngine(conversation, messageText, flow, attachments, isResuming);
+        console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
+
+        // 6️⃣ Completion Logic
+        if (result.order_complete) {
+            console.log("🎉 Conversation Complete. Saving results...");
+            const businessType = result.business_type || flow.business_type || 'online_shop';
+
+            const cleanData = Object.keys(result.temp_data || {}).reduce((acc: any, key) => {
+                if (!key.startsWith('_')) {
+                    acc[key] = result.temp_data[key];
+                }
+                return acc;
+            }, {});
+
+            if (cleanData.payment && !cleanData.payment_method) {
+                cleanData.payment_method = cleanData.payment;
+            }
+
+            if (businessType === 'cargo') {
+                console.log(`📦 Saving Shipment Request for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
+                const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
+                    merchant_id: merchantId,
+                    conversation_id: conversation.id,
+                    page_id: pageId,
+                    order_no: result.temp_data.order_no,
+                    ...cleanData,
+                    status: "pending",
+                });
+
+                if (shipErr && shipErr.message.includes('column') && shipErr.message.includes('does not exist')) {
+                    const { item_photos, ...safeData } = cleanData;
+                    await supabaseAdmin.from("shipments").insert({
+                        merchant_id: merchantId,
+                        conversation_id: conversation.id,
+                        page_id: pageId,
+                        order_no: result.temp_data.order_no,
+                        ...safeData,
+                        status: "pending",
+                    });
+                }
+            } else {
+                console.log(`🛍️ Saving Order for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
+                const { error: orderErr } = await supabaseAdmin.from("orders").insert({
+                    merchant_id: merchantId,
+                    conversation_id: conversation.id,
+                    page_id: pageId,
+                    order_no: result.temp_data.order_no,
+                    ...cleanData,
+                    status: "pending",
+                });
+                if (orderErr && orderErr.message.includes('column') && orderErr.message.includes('does not exist')) {
+                    const { item_photos, ...safeData } = cleanData;
+                    await supabaseAdmin.from("orders").insert({
+                        merchant_id: merchantId,
+                        conversation_id: conversation.id,
+                        page_id: pageId,
+                        order_no: result.temp_data.order_no,
+                        ...safeData,
+                        status: "pending",
+                    });
+                }
+            }
+            await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
+        }
+
+        // 7️⃣ Send Reply
+        console.log("📤 Sending reply to Facebook...");
+        await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+        console.log("🏁 Webhook processing finished successfully.");
+
     } catch (error) {
         logger.error("🔴 GLOBAL WEBHOOK ERROR", error);
-        return res.sendStatus(500);
+        // We dont send 500 here because we already sent 200 early or it might cause more retries
     }
 };
