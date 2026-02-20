@@ -349,11 +349,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 }
 
                 if (businessType === 'cargo') {
-                    console.log(`📦 Saving Shipment Request for merchant ${merchantId}:`, cleanData);
+                    console.log(`📦 Saving Shipment Request for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
                     const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
                         page_id: pageId,
+                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
                         ...cleanData,
                         status: "pending",
                     });
@@ -363,11 +364,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         console.log("✅ Shipment saved successfully.");
                     }
                 } else {
-                    console.log(`🛍️ Saving Order for merchant ${merchantId}:`, cleanData);
+                    console.log(`🛍️ Saving Order for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
                     const { error: orderErr } = await supabaseAdmin.from("orders").insert({
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
                         page_id: pageId,
+                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
                         ...cleanData,
                         status: "pending",
                     });

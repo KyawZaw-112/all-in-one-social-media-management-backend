@@ -44,10 +44,14 @@ export async function subscribePageToWebhook(pageId, pageAccessToken) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             access_token: pageAccessToken,
+            subscribed_fields: ["messages", "messaging_postbacks"], // 👈 REQUIRED
         }),
     });
     const data = await response.json();
-    console.log("Subscribe response:", data);
+    if (!response.ok) {
+        console.error("Subscribe failed:", data);
+        throw new Error(data.error?.message || "Failed to subscribe webhook");
+    }
 }
 export async function getUserPages(userAccessToken) {
     const { data } = await axios.get("https://graph.facebook.com/v19.0/me/accounts", {
@@ -56,7 +60,7 @@ export async function getUserPages(userAccessToken) {
     return data.data;
 }
 export async function sendMessage(pageId, pageToken, recipientId, text) {
-    await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`, {
+    const response = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -64,4 +68,28 @@ export async function sendMessage(pageId, pageToken, recipientId, text) {
             message: { text },
         }),
     });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Facebook Send Message Failed:", {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData
+        });
+        throw new Error(`Facebook API Error: ${response.status} ${response.statusText}`);
+    }
+}
+export async function getUserProfile(psid, pageToken) {
+    try {
+        const { data } = await axios.get(`https://graph.facebook.com/v19.0/${psid}`, {
+            params: {
+                fields: "first_name,last_name,name",
+                access_token: pageToken
+            }
+        });
+        return data;
+    }
+    catch (error) {
+        console.error("⚠️ Failed to fetch user profile:", error);
+        return null;
+    }
 }

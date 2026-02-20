@@ -76,4 +76,49 @@ router.delete("/:id", requireAdmin, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+/* ===============================
+   CREATE USER
+   POST /api/admin/users
+================================ */
+router.post("/", requireAdmin, async (req, res) => {
+    try {
+        const { email, password, name, role = "user" } = req.body;
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: "Name, email and password are required" });
+        }
+        /* 1️⃣ Create User in Supabase Auth */
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true, // Auto confirm email since admin created it
+            user_metadata: { full_name: name, role: role }
+        });
+        if (authError)
+            throw authError;
+        if (!authData.user)
+            throw new Error("User creation failed");
+        /* 2️⃣ Add to merchants table */
+        const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
+            id: authData.user.id,
+            business_name: `${name}'s Business`,
+            subscription_plan: 'shop', // Default plan
+            trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days trial
+            subscription_status: 'active'
+        });
+        if (merchantError) {
+            // Rollback auth user creation if merchant creation fails?
+            // For now, just log it. In production, we'd want a transaction or rollback.
+            console.error("Merchant creation failed after auth user created:", merchantError);
+            return res.status(500).json({ error: "User created but profile setup failed: " + merchantError.message });
+        }
+        res.status(201).json({
+            success: true,
+            user: authData.user,
+            message: "User created successfully"
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 export default router;

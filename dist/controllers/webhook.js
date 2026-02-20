@@ -1,6 +1,7 @@
-import { sendMessage } from "../services/facebook.services.js";
+import { sendMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { runConversationEngine } from "../services/conversationEngine.js";
+import { runConversationEngine, getWelcomeMessage } from "../services/conversationEngine.js";
+import logger from "../utils/logger.js";
 export const verifyWebhook = (req, res) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
     const mode = req.query["hub.mode"];
@@ -12,59 +13,139 @@ export const verifyWebhook = (req, res) => {
     return res.sendStatus(403);
 };
 export const handleWebhook = async (req, res) => {
-    console.log("Webhook received:");
-    console.log(JSON.stringify(req.body, null, 2));
+    const body = req.body;
+    logger.info("📥 Webhook received", { object: body.object });
     try {
-        const pageId = req.body.entry?.[0]?.id;
-        const senderId = req.body.entry?.[0]?.messaging?.[0]?.sender?.id;
-        const messageText = req.body.entry?.[0]?.messaging?.[0]?.message?.text;
+        const entry = body.entry?.[0];
+        const messaging = entry?.messaging?.[0];
+        const isEcho = messaging?.message?.is_echo;
+        if (isEcho) {
+            console.log("🗣️ Ignoring message echo from Facebook");
+            return res.sendStatus(200);
+        }
+        const pageId = entry?.id;
+        const senderId = messaging?.sender?.id;
+        const messageText = messaging?.message?.text;
+        console.log("📝 Parsed Webhook Data:", { pageId, senderId, messageText: messageText?.substring(0, 20) });
         if (!pageId || !senderId || !messageText) {
+            console.log("⚠️ Missing required data (pageId/senderId/messageText)");
             return res.sendStatus(200);
         }
         // 1️⃣ Find merchant connection
-        const { data: connection } = await supabaseAdmin
+        const { data: connection, error: connError } = await supabaseAdmin
             .from("platform_connections")
             .select("*")
             .eq("page_id", pageId)
-            .single();
-        console.log("Found connection:", connection);
-        console.log("Page ID from webhook:", pageId);
-        if (!connection)
+            .maybeSingle();
+        if (connError) {
+            logger.error("❌ Connection Search Error", connError, { pageId });
+        }
+        if (!connection) {
+            console.log("🚫 No connection record for Page ID:", pageId);
             return res.sendStatus(200);
-        const merchantId = connection.merchant_id;
-        let { data: conversation } = await supabaseAdmin
+        }
+        const merchantId = connection.user_id || connection.merchant_id;
+        console.log("👤 Merchant:", merchantId, "Page Access Token exists:", !!connection.page_access_token);
+        // 1.2️⃣ Admin Keyword Check (Silence Bot)
+        const adminKeywords = ["admin", "အက်မင်", "မင်မင်"];
+        const lowerMessage = messageText.toLowerCase().trim();
+        if (adminKeywords.some(k => lowerMessage.includes(k))) {
+            console.log("👤 Admin requested by user. Silencing bot.");
+            // Record message for the dashboard
+            await supabaseAdmin.from("messages").insert({
+                user_id: merchantId,
+                sender_id: senderId,
+                sender_email: senderId,
+                sender_name: "Facebook User",
+                body: messageText,
+                channel: "facebook",
+                status: "received"
+            });
+            // Send a small confirmation that admin is notified (optional, but good UX)
+            await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
+            return res.sendStatus(200);
+        }
+        // 1.5️⃣ Check Subscription Status (Disabled as per user request to let page owner handle)
+        const { data: merchant, error: merchError } = await supabaseAdmin
+            .from("merchants")
+            .select("subscription_status, trial_ends_at, business_type")
+            .eq("id", merchantId)
+            .maybeSingle();
+        if (merchError)
+            logger.error("❌ Merchant Search Error", merchError, { merchantId });
+        // 2️⃣ Check for active conversation
+        let isResuming = true;
+        let { data: activeConvs, error: convError } = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("merchant_id", merchantId)
             .eq("user_psid", senderId)
             .eq("status", "active")
-            .maybeSingle();
+            .order("created_at", { ascending: false });
+        if (convError)
+            logger.error("❌ Conversation Search Error", convError, { merchantId, senderId });
+        // Take the latest one
+        let conversation = activeConvs && activeConvs.length > 0 ? activeConvs[0] : null;
+        // Cleanup: If there are multiple active conversations, DELETE older ones
+        // to prevent database clutter (as per user concern).
+        if (activeConvs && activeConvs.length > 1) {
+            console.log(`🧹 Deleting ${activeConvs.length - 1} redundant active conversations for PSID: ${senderId}`);
+            const olderIds = activeConvs.slice(1).map(c => c.id);
+            // Note: In a production environment with foreign keys, 
+            // you might want to switch to 'superseded' status if you want to keep history,
+            // but for "trash prevention", immediate deletion of unfinished sessions is effective.
+            await supabaseAdmin
+                .from("conversations")
+                .delete()
+                .in("id", olderIds);
+        }
         let flow;
-        // 3️⃣ If no conversation → match trigger
+        // 3️⃣ Match flow or load existing
         if (!conversation) {
-            const { data: matchedFlow, error: errorFlow } = await supabaseAdmin
+            isResuming = false;
+            const rawMessage = messageText.toLowerCase().trim();
+            console.log("🆕 Checking for flow trigger. Message:", rawMessage);
+            // Get all active flows for this merchant
+            const { data: flows, error: flowError } = await supabaseAdmin
                 .from("automation_flows")
                 .select("*")
                 .eq("merchant_id", merchantId)
-                .eq("trigger_keyword", messageText.trim())
-                .eq("is_active", true)
-                .maybeSingle();
-            console.log("Flow Query Merchant ID:", merchantId);
-            if (errorFlow) {
-                console.log("Error fetching flow:", errorFlow);
-                return res.sendStatus(200);
-            }
+                .eq("is_active", true);
+            if (flowError)
+                logger.error("❌ Flow Search Error", flowError, { merchantId });
+            // flexible Trigger: Check if message matches any keyword (supports commas)
+            const matchedFlow = flows?.find(f => {
+                const keywords = f.trigger_keyword.toLowerCase().split(',').map((k) => k.trim());
+                return keywords.some((k) => rawMessage.includes(k) && k.length > 0);
+            });
             if (!matchedFlow) {
-                console.log("No flow matched for message:", messageText);
-                return res.sendStatus(200);
+                console.log(`🆕 Attempting auto-start for message: "${rawMessage}"`);
+                let bType = merchant?.business_type || 'online_shop';
+                if (bType === 'shop')
+                    bType = 'online_shop';
+                const autoMatched = flows?.find(f => f.business_type === bType);
+                if (autoMatched) {
+                    flow = autoMatched;
+                    console.log("✅ Auto-matched Flow by Type:", flow.name);
+                }
+                else if (flows && flows.length > 0) {
+                    flow = flows[0];
+                    console.log("✅ Fallback to first flow:", flow.name);
+                }
+                else {
+                    console.log("🚫 No flows available for auto-start.");
+                    return res.sendStatus(200);
+                }
             }
-            flow = matchedFlow;
-            console.log("Page ID inserting", pageId);
-            const { data: newConversation, error: insertError } = await supabaseAdmin
+            else {
+                flow = matchedFlow;
+            }
+            console.log("✅ Matched Flow:", flow.name, "ID:", flow.id, "triggered by:", rawMessage);
+            const { data: newConv, error: createError } = await supabaseAdmin
                 .from("conversations")
                 .insert({
                 merchant_id: merchantId,
-                page_id: pageId, // 👈 ADD THIS
+                page_id: pageId,
                 user_psid: senderId,
                 flow_id: flow.id,
                 temp_data: {},
@@ -72,44 +153,195 @@ export const handleWebhook = async (req, res) => {
             })
                 .select()
                 .single();
-            if (insertError) {
-                console.log("Insert conversation error:", insertError);
+            if (createError) {
+                logger.error("❌ Failed to create conversation", createError, { merchantId, senderId, flowId: flow.id });
                 return res.sendStatus(200);
             }
-            conversation = newConversation;
+            conversation = newConv;
+            console.log("✨ New conversation created:", conversation.id);
+            // 🔥 Fetch User Profile Name
+            let senderName = "Facebook User";
+            try {
+                const profile = await getUserProfile(senderId, connection.page_access_token);
+                if (profile?.name) {
+                    senderName = profile.name;
+                    console.log("👤 Fetched User Name:", senderName);
+                }
+            }
+            catch (err) {
+                logger.warn("⚠️ Failed to fetch user name", err);
+            }
+            // Send welcome message first
+            const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata);
+            try {
+                await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
+                // Log welcome message
+                await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: merchantId,
+                    sender_email: "AI-Assistant",
+                    sender_name: "Auto-Reply Bot",
+                    body: welcomeMsg,
+                    channel: "facebook",
+                    status: "replied",
+                    conversation_id: conversation.id
+                });
+            }
+            catch (welcomeErr) {
+                logger.warn("⚠️ Welcome message send failed (non-critical)", welcomeErr);
+            }
         }
         else {
-            const { data: existingFlow } = await supabaseAdmin
-                .from("automation_flows")
-                .select("*")
-                .eq("id", conversation.flow_id)
-                .single();
-            flow = existingFlow;
-        }
-        if (!conversation || !flow) {
+            console.log("♻️ Resuming active conversation:", conversation.id);
+            // 🟢 Migration Handle: If conversation was in 'selecting_type', auto-match it now
+            if (conversation.temp_data?._state === 'selecting_type') {
+                console.log("🛠️ Migrating orphaned selection state to auto-flow...");
+                const { data: flows } = await supabaseAdmin
+                    .from("automation_flows")
+                    .select("*")
+                    .eq("merchant_id", merchantId)
+                    .eq("is_active", true);
+                let bType = merchant?.business_type || 'online_shop';
+                if (bType === 'shop')
+                    bType = 'online_shop';
+                const matched = flows?.find(f => f.business_type === bType) || flows?.[0];
+                if (matched) {
+                    flow = matched;
+                    await supabaseAdmin.from("conversations").update({
+                        flow_id: flow.id,
+                        temp_data: {}
+                    }).eq("id", conversation.id);
+                    conversation.flow_id = flow.id;
+                    conversation.temp_data = {};
+                    isResuming = false; // Start fresh
+                }
+            }
+            // Normal flow loading
+            if (!flow && conversation.flow_id) {
+                const { data: existingFlow } = await supabaseAdmin
+                    .from("automation_flows")
+                    .select("*")
+                    .eq("id", conversation.flow_id)
+                    .maybeSingle();
+                flow = existingFlow;
+            }
+            // If flow is still missing (e.g. flow was deleted), try to match a new one
+            if (!flow) {
+                console.log("⚠️ Flow missing or null for active conversation. Attempting to re-match...");
+                const rawMessage = messageText.toLowerCase().trim();
+                const { data: flows } = await supabaseAdmin
+                    .from("automation_flows")
+                    .select("*")
+                    .eq("merchant_id", merchantId)
+                    .eq("is_active", true);
+                const matchedFlow = flows?.find(f => {
+                    const keyword = f.trigger_keyword.toLowerCase().trim();
+                    return rawMessage.includes(keyword);
+                });
+                if (matchedFlow) {
+                    console.log("✅ Re-matched orphaned conversation to flow:", matchedFlow.name);
+                    flow = matchedFlow;
+                    // Update conversation with new flow_id
+                    await supabaseAdmin.from("conversations").update({ flow_id: flow.id }).eq("id", conversation.id);
+                    isResuming = false;
+                }
+                else {
+                    let bType = merchant?.business_type || 'online_shop';
+                    if (bType === 'shop')
+                        bType = 'online_shop';
+                    const selectionMsg = bType === 'cargo'
+                        ? "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Cargo ပို့ဆောင်ရန် တောင်းဆိုရန် 📦\n2️⃣ Admin နှင့် စကားပြောရန် 👤"
+                        : "မင်္ဂလာပါ! အောက်ပါတို့မှ တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ:\n\n1️⃣ Online Shop မှာ ပစ္စည်းမှာယူရန် 🛍️\n2️⃣ Admin နှင့် စကားပြောရန် 👤";
+                    await supabaseAdmin.from("conversations").update({
+                        temp_data: { _state: 'selecting_type' }
+                    }).eq("id", conversation.id);
+                    await sendMessage(pageId, connection.page_access_token, senderId, selectionMsg);
+                    return res.sendStatus(200);
+                }
+            }
+            // 4.5 Record incoming message
+            const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+                user_id: merchantId,
+                sender_id: senderId,
+                sender_email: senderId,
+                sender_name: "Facebook User",
+                body: messageText,
+                channel: "facebook",
+                status: "received",
+                conversation_id: conversation?.id,
+                metadata: { conversation_id: conversation?.id }
+            });
+            if (msgErr)
+                logger.error("❌ Failed to record linked message", msgErr, { merchantId, conversationId: conversation?.id });
+            if (!conversation || !flow) {
+                logger.error("💥 Critical: Conversation or flow is null after initialization", null, { conversation, flow });
+                return res.sendStatus(200);
+            }
+            // 5️⃣ Run conversation engine
+            console.log("⚙️ Running Conversation Engine. Resuming:", isResuming);
+            const result = await runConversationEngine(conversation, messageText, flow, isResuming);
+            console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
+            // 6️⃣ Completion Logic
+            if (result.order_complete) {
+                console.log("🎉 Conversation Complete. Saving results...");
+                const businessType = result.business_type || flow.business_type || 'online_shop';
+                // Clean tempData: remove internal fields starting with "_"
+                // and map common fields to ensure database compatibility
+                const cleanData = Object.keys(result.temp_data || {}).reduce((acc, key) => {
+                    if (!key.startsWith('_')) {
+                        acc[key] = result.temp_data[key];
+                    }
+                    return acc;
+                }, {});
+                // Force mapping for common fields if missing
+                if (cleanData.payment && !cleanData.payment_method) {
+                    cleanData.payment_method = cleanData.payment;
+                }
+                if (businessType === 'cargo') {
+                    console.log(`📦 Saving Shipment Request for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
+                    const { error: shipErr } = await supabaseAdmin.from("shipments").insert({
+                        merchant_id: merchantId,
+                        conversation_id: conversation.id,
+                        page_id: pageId,
+                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
+                        ...cleanData,
+                        status: "pending",
+                    });
+                    if (shipErr) {
+                        logger.error("❌ Shipment Insertion Failed", shipErr, { merchantId, conversationId: conversation.id });
+                    }
+                    else {
+                        console.log("✅ Shipment saved successfully.");
+                    }
+                }
+                else {
+                    console.log(`🛍️ Saving Order for merchant ${merchantId}. Keys:`, Object.keys(cleanData));
+                    const { error: orderErr } = await supabaseAdmin.from("orders").insert({
+                        merchant_id: merchantId,
+                        conversation_id: conversation.id,
+                        page_id: pageId,
+                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
+                        ...cleanData,
+                        status: "pending",
+                    });
+                    if (orderErr) {
+                        logger.error("❌ Order Insertion Failed", orderErr, { merchantId, conversationId: conversation.id });
+                    }
+                    else {
+                        console.log("✅ Order saved successfully.");
+                    }
+                }
+                await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
+            }
+            // 7️⃣ Send Reply
+            console.log("📤 Sending reply to Facebook...");
+            await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+            console.log("🏁 Webhook processing finished successfully.");
             return res.sendStatus(200);
         }
-        // 4️⃣ Run AI conversation engine
-        const result = await runConversationEngine(conversation, messageText, flow);
-        // 5️⃣ Auto create order if completed
-        if (result.order_complete) {
-            await supabaseAdmin.from("orders").insert({
-                merchant_id: merchantId,
-                conversation_id: conversation.id,
-                ...result.temp_data,
-                status: "pending",
-            });
-            await supabaseAdmin
-                .from("conversations")
-                .update({ status: "completed" })
-                .eq("id", conversation.id);
-        }
-        // 6️⃣ Send reply to Messenger
-        await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
-        return res.sendStatus(200);
     }
     catch (error) {
-        console.error("Webhook error:", error);
+        logger.error("🔴 GLOBAL WEBHOOK ERROR", error);
         return res.sendStatus(500);
     }
 };

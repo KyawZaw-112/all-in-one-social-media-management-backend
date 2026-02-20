@@ -33,7 +33,7 @@ router.post("/stripe/checkout", requireAuth, async (req, res) => {
                     currency: "thb",
                     recurring: { interval: "month" },
                     product_data: { name: "All in One Social Media Management Pro" },
-                    unit_amount: 9900,
+                    unit_amount: 200000,
                 },
                 quantity: 1,
             },
