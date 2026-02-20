@@ -2,6 +2,8 @@ import { sendMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response } from "express";
 import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../services/conversationEngine.js";
+import { FacebookWebhookPayload } from "../types/facebook.js";
+import logger from "../utils/logger.js";
 
 export const verifyWebhook = (req: Request, res: Response) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
@@ -18,10 +20,11 @@ export const verifyWebhook = (req: Request, res: Response) => {
 };
 
 export const handleWebhook = async (req: Request, res: Response) => {
-    console.log("📥 Webhook received:", JSON.stringify(req.body, null, 2));
+    const body = req.body as FacebookWebhookPayload;
+    logger.info("📥 Webhook received", { object: body.object });
 
     try {
-        const entry = req.body.entry?.[0];
+        const entry = body.entry?.[0];
         const messaging = entry?.messaging?.[0];
         const isEcho = messaging?.message?.is_echo;
 
@@ -49,7 +52,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .maybeSingle();
 
         if (connError) {
-            console.error("❌ Connection Search Error:", connError);
+            logger.error("❌ Connection Search Error", connError, { pageId });
         }
 
         if (!connection) {
@@ -87,7 +90,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .eq("id", merchantId)
             .maybeSingle();
 
-        if (merchError) console.error("❌ Merchant Search Error:", merchError);
+        if (merchError) logger.error("❌ Merchant Search Error", merchError, { merchantId });
 
         // 2️⃣ Check for active conversation
         let isResuming = true;
@@ -99,7 +102,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .eq("status", "active")
             .order("created_at", { ascending: false });
 
-        if (convError) console.error("❌ Conversation Search Error:", convError);
+        if (convError) logger.error("❌ Conversation Search Error", convError, { merchantId, senderId });
 
         // Take the latest one
         let conversation = activeConvs && activeConvs.length > 0 ? activeConvs[0] : null;
@@ -134,7 +137,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .eq("merchant_id", merchantId)
                 .eq("is_active", true);
 
-            if (flowError) console.error("❌ Flow Search Error:", flowError);
+            if (flowError) logger.error("❌ Flow Search Error", flowError, { merchantId });
 
             // flexible Trigger: Check if message matches any keyword (supports commas)
             const matchedFlow = flows?.find(f => {
@@ -179,7 +182,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .single();
 
             if (createError) {
-                console.error("❌ Failed to create conversation:", createError);
+                logger.error("❌ Failed to create conversation", createError, { merchantId, senderId, flowId: flow.id });
                 return res.sendStatus(200);
             }
 
@@ -195,7 +198,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     console.log("👤 Fetched User Name:", senderName);
                 }
             } catch (err) {
-                console.error("⚠️ Failed to fetch user name:", err);
+                logger.warn("⚠️ Failed to fetch user name", err);
             }
 
             // Send welcome message first
@@ -220,7 +223,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     conversation_id: conversation.id
                 });
             } catch (welcomeErr) {
-                console.error("⚠️ Welcome message send failed (non-critical):", welcomeErr);
+                logger.warn("⚠️ Welcome message send failed (non-critical)", welcomeErr);
             }
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
@@ -314,10 +317,10 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 conversation_id: conversation?.id,
                 metadata: { conversation_id: conversation?.id }
             });
-            if (msgErr) console.error("❌ Failed to record linked message:", msgErr);
+            if (msgErr) logger.error("❌ Failed to record linked message", msgErr, { merchantId, conversationId: conversation?.id });
 
             if (!conversation || !flow) {
-                console.error("💥 Critical: Conversation or flow is null after initialization");
+                logger.error("💥 Critical: Conversation or flow is null after initialization", null, { conversation, flow });
                 return res.sendStatus(200);
             }
 
@@ -355,7 +358,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         status: "pending",
                     });
                     if (shipErr) {
-                        console.error("❌ Shipment Insertion Failed:", shipErr.message, shipErr.details);
+                        logger.error("❌ Shipment Insertion Failed", shipErr, { merchantId, conversationId: conversation.id });
                     } else {
                         console.log("✅ Shipment saved successfully.");
                     }
@@ -369,7 +372,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         status: "pending",
                     });
                     if (orderErr) {
-                        console.error("❌ Order Insertion Failed:", orderErr.message, orderErr.details);
+                        logger.error("❌ Order Insertion Failed", orderErr, { merchantId, conversationId: conversation.id });
                     } else {
                         console.log("✅ Order saved successfully.");
                     }
@@ -386,7 +389,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
             return res.sendStatus(200);
         }
     } catch (error) {
-        console.error("🔴 GLOBAL WEBHOOK ERROR:", error);
+        logger.error("🔴 GLOBAL WEBHOOK ERROR", error);
         return res.sendStatus(500);
     }
 };

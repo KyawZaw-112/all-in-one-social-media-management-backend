@@ -205,12 +205,6 @@ router.get("/orders", requireAuth, async (req: any, res) => {
         // Try merchant_id first
         let query = await supabaseAdmin.from("orders").select("*").eq("merchant_id", userId).order("created_at", { ascending: false });
 
-        // Fallback to user_id if merchant_id is missing
-        if (query.error && (query.error.code === '42703' || query.error.message.includes('merchant_id'))) {
-            console.log("⚠️ Falling back to user_id for orders...");
-            query = await supabaseAdmin.from("orders").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-        }
-
         if (query.error) {
             console.error("❌ Orders query error:", query.error);
             if (query.error.code === '42P01' || query.error.message?.includes('does not exist')) return res.json({ success: true, data: [] });
@@ -230,12 +224,6 @@ router.get("/shipments", requireAuth, async (req: any, res) => {
 
         // Try merchant_id first
         let query = await supabaseAdmin.from("shipments").select("*").eq("merchant_id", userId).order("created_at", { ascending: false });
-
-        // Fallback to user_id
-        if (query.error && (query.error.code === '42703' || query.error.message.includes('merchant_id'))) {
-            console.log("⚠️ Falling back to user_id for shipments...");
-            query = await supabaseAdmin.from("shipments").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-        }
 
         if (query.error) {
             console.error("❌ Shipments query error:", query.error);
@@ -346,7 +334,10 @@ router.patch("/orders/:id/status", requireAuth, async (req: any, res) => {
 
         // 🟢 Automated Facebook Notification for Approved Orders
         if (status === 'approved' && data?.conversation_id) {
-            handleStatusApproved(data.conversation_id, userId, "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏");
+            const merchant = await getMerchant(userId);
+            const lang = merchant?.subscription_plan === 'online_shop' ? 'my' : 'en'; // Simple heuristic or use a field
+            const msg = lang === 'my' ? "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏" : "Thank you for your order! 🙏";
+            handleStatusApproved(data.conversation_id, userId, msg);
         }
 
         res.json({ success: true, data });
@@ -378,7 +369,10 @@ router.patch("/shipments/:id/status", requireAuth, async (req: any, res) => {
 
         // 🟢 Automated Facebook Notification for Approved Shipments
         if (status === 'approved' && data?.conversation_id) {
-            handleStatusApproved(data.conversation_id, userId, "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏");
+            const merchant = await getMerchant(userId);
+            const lang = merchant?.subscription_plan === 'online_shop' ? 'my' : 'en';
+            const msg = lang === 'my' ? "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏" : "Thank you for your order! 🙏";
+            handleStatusApproved(data.conversation_id, userId, msg);
         }
 
         res.json({ success: true, data });

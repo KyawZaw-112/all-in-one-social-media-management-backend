@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { subscribePageToWebhook } from "../services/facebook.services.js";
 import { seedDefaultFlows } from "../services/seed.services.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -102,12 +103,13 @@ router.get("/facebook/callback", async (req, res) => {
                 });
                 console.log("🧐 Token Debug Info:", JSON.stringify(debugRes.data.data, null, 2));
             } catch (debugErr) {
-                console.error("⚠️ Failed to debug token:", debugErr);
+                logger.warn("⚠️ Failed to debug token", debugErr);
             }
 
         } catch (exErr: any) {
-            console.error("❌ Token Exchange Failed:", exErr.response?.data || exErr.message);
-            // Fallback to short-lived token if exchange fails, but log it clearly
+            logger.error("❌ Token Exchange Failed", exErr.response?.data || exErr.message);
+            // If exchange fails, we should still try with short token but log it. 
+            // Better: stop here if you want high reliability, but let's just log for now as planned.
         }
 
         const pagesRes = await axios.get(
@@ -119,7 +121,7 @@ router.get("/facebook/callback", async (req, res) => {
         const pages = pagesRes.data.data || [];
 
         if (pages.length === 0) {
-            console.error("❌ No Facebook pages found for this user access token.");
+            logger.error("❌ No Facebook pages found for this user access token", null, { userId });
             throw new Error("သင်၏ Facebook အကောင့်တွင် Page မတွေ့ရပါ။ ကျေးဇူးပြု၍ Facebook Login ဝင်စဉ် Page တစ်ခုကို အမှန်ခြစ်ခဲ့ပါသလား ပြန်စစ်ပေးပါ။");
         }
 
@@ -145,7 +147,7 @@ router.get("/facebook/callback", async (req, res) => {
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
-            if (merchError) console.error("Failed to create missing merchant:", merchError);
+            if (merchError) logger.error("Failed to create missing merchant", merchError, { userId });
         } else {
             console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
@@ -165,7 +167,7 @@ router.get("/facebook/callback", async (req, res) => {
             );
 
         if (insertError) {
-            console.error("Insert error in platform_connections:", insertError);
+            logger.error("Insert error in platform_connections", insertError, { userId, pageId: page.id });
             if (insertError.message.includes("row-level security policy")) {
                 throw new Error("Database Access Error: RLS violation. Please handle this in Supabase.");
             }
@@ -189,7 +191,7 @@ router.get("/facebook/callback", async (req, res) => {
 
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     } catch (error: any) {
-        console.error("OAuth Error:", error.response?.data || error.message);
+        logger.error("OAuth Error", error, { userId: req.query.state });
         const errorMsg = encodeURIComponent(error.message || "OAuth validation failed");
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?error=true&message=${errorMsg}`);
     }
@@ -263,8 +265,13 @@ router.post("/register", async (req, res) => {
         });
 
         if (merchantError) {
-            console.error("❌ Merchant profile creation FAILED:", merchantError);
-            throw new Error(`Failed to create merchant profile: ${merchantError.message}`);
+            logger.error("❌ Merchant profile creation FAILED", merchantError, { email });
+            // If it's a unique constraint on ID, maybe the merchant was created by a trigger?
+            if (merchantError.code === '23505') {
+                console.log("♻️ Merchant already exists, skipping insert.");
+            } else {
+                throw new Error(`Failed to create merchant profile: ${merchantError.message}`);
+            }
         }
 
         console.log("✅ Merchant profile created successfully");
@@ -303,7 +310,7 @@ router.post("/register", async (req, res) => {
             message: "Registration successful! Welcome! 🚀"
         });
     } catch (error: any) {
-        console.error("❌ Registration error:", error.message);
+        logger.error("❌ Registration error", error, { email: req.body.email });
         res.status(500).json({ error: error.message });
     }
 });

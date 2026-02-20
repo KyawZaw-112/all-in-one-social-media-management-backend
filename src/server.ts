@@ -13,6 +13,7 @@ import adminPaymentsRoutes from "./routes/adminPayments.js";
 import platformsRoutes from "./routes/platforms.js";
 import autoReplyRoutes from "./routes/autoReply.js";
 import merchantRoutes from "./routes/merchants.js";
+import logger from "./utils/logger.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -29,7 +30,11 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({
+    verify: (req: any, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 
 // Health Check for Render/Vercel
 app.get("/", (req, res) => {
@@ -57,7 +62,12 @@ if (merchantRoutes) {
 
 // Error Handling Middleware
 app.use((err: any, req: any, res: any, next: any) => {
-    console.error("🔥 Global Error:", err);
+    logger.error("Global Express Error", err, {
+        path: req.path,
+        method: req.method,
+        ip: req.ip
+    });
+
     res.status(500).json({
         success: false,
         error: "Internal Server Error",
