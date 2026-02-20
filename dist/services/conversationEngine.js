@@ -253,6 +253,12 @@ const CARGO_FLOW = {
             validation: (v) => v.trim().length > 0,
         },
         {
+            field: "item_photos",
+            type: "media",
+            requiredCount: 5,
+            question: "ပစ္စည်းရဲ့ ပုံ ၅ ပုံ ပို့ပေးပါခင်ဗျာ 📸 (၅ ပုံ ပြည့်အောင် ပို့ပေးရပါမယ်)"
+        },
+        {
             field: "item_value",
             question: "ပစ္စည်းတန်ဖိုး မည်မျှလဲ? 💰\n" +
                 "(ဥပမာ - 50 USD / 1500 CNY)\n" +
@@ -293,19 +299,29 @@ const CARGO_FLOW = {
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
             "📋 CARGO အချက်အလက်\n" +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
-            `📌 Ref No      : #${refNo}\n` +
-            `🌏 နိုင်ငံ      : ${d.country || "-"}\n` +
-            `🚢 ပို့ဆောင်မှု  : ${d.shipping || "-"}\n` +
-            `📦 အမျိုးအစား  : ${d.item_type || "-"}\n` +
-            `📝 ပစ္စည်း     : ${d.item_name || "-"}\n` +
-            `⚖️ အလေးချိန်  : ${d.weight || "-"}\n` +
-            `💰 တန်ဖိုး    : ${d.item_value || "-"}\n` +
+            `📌 Ref No: \n` +
+            `#${refNo}\n` +
+            `🌏 နိုင်ငံ: \n` +
+            `${d.country || "-"}\n` +
+            `🚢 ပို့ဆောင်မှု: \n` +
+            `${d.shipping || "-"}\n` +
+            `📦 အမျိုးအစား: \n` +
+            `${d.item_type || "-"}\n` +
+            `📝 ပစ္စည်း: \n` +
+            `${d.item_name || "-"}\n` +
+            `⚖️ အလေးချိန်: \n` +
+            `${d.weight || "-"}\n` +
+            `💰 တန်ဖိုး: \n` +
+            `${d.item_value || "-"}\n` +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
-            `👤 နာမည်      : ${d.full_name || "-"}\n` +
-            `📞 ဖုန်း      : ${d.phone || "-"}\n` +
-            `📍 လိပ်စာ     : ${d.address || "-"}\n` +
+            `👤 နာမည်: \n` +
+            `${d.full_name || "-"}\n` +
+            `📞 ဖုန်း: \n` +
+            `${d.phone || "-"}\n` +
+            `📍 လိပ်စာ: \n` +
+            `${d.address || "-"}\n` +
             "━━━━━━━━━━━━━━━━━━━━━━\n" +
-            `⏰ တုံ့ပြန်ချိန်  : ၁-၂ နာရီ (ရုံးချိန်အတွင်း)\n\n` +
+            `⏰ တုံ့ပြန်ချိန်: ၁-၂ နာရီ (ရုံးချိန်အတွင်း)\n\n` +
             "Admin မှ Viber/Messenger ဖြင့်\nဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 😊");
     },
     incompleteMessage: "📝 ဆက်ဖြေပေးပါ။ Please continue...",
@@ -384,7 +400,7 @@ function getActiveSteps(steps, tempData) {
     });
 }
 // ─── Main Engine ─────────────────────────────────────────────────
-export async function runConversationEngine(conversation, messageText, flow, isResuming = true) {
+export async function runConversationEngine(conversation, messageText, flow, attachments = [], isResuming = true) {
     const tempData = conversation.temp_data || {};
     // Get metadata and merge steps
     const metadata = flow.metadata || {};
@@ -393,7 +409,7 @@ export async function runConversationEngine(conversation, messageText, flow, isR
     // Merge hardcoded steps with metadata overrides and filters
     const baseSteps = flowDef.steps;
     const mergedSteps = baseSteps
-        .map(step => {
+        .map((step) => {
         const override = metadata.steps?.[step.field];
         if (!override)
             return step;
@@ -409,31 +425,56 @@ export async function runConversationEngine(conversation, messageText, flow, isR
     // Find the current step (first step without data)
     let currentStepIndex = 0;
     for (let i = 0; i < activeSteps.length; i++) {
-        if (!tempData[activeSteps[i].field]) {
+        const step = activeSteps[i];
+        if (step.type === 'media' && step.requiredCount) {
+            const currentCount = (tempData[step.field] || []).length;
+            if (currentCount < step.requiredCount) {
+                currentStepIndex = i;
+                break;
+            }
+        }
+        else if (!tempData[activeSteps[i].field]) {
             currentStepIndex = i;
             break;
         }
     }
     const currentStep = activeSteps[currentStepIndex];
     // If resuming (not a new trigger), validate and save the user's answer
-    if (isResuming && currentStep && !tempData[currentStep.field]) {
-        const isValid = currentStep.validation ? currentStep.validation(messageText) : true;
-        if (!isValid) {
-            const errorReply = "❌ မှားယွင်းနေပါသည်။ ပြန်လည်ရိုက်ပေးပါ။\n\n" +
-                currentStep.question;
-            await saveReplyMessage(conversation, flow, errorReply);
-            return {
-                reply: errorReply,
-                temp_data: tempData,
-                order_complete: false,
-                business_type: businessType,
-            };
+    if (isResuming && currentStep) {
+        if (currentStep.type === 'media') {
+            // Handle Media/Attachments
+            const incomingPhotos = (attachments || []).filter(a => a.type === 'image');
+            if (incomingPhotos.length > 0) {
+                const existingPhotos = tempData[currentStep.field] || [];
+                const updatedPhotos = [...existingPhotos, ...incomingPhotos.map(p => p.payload?.url || p.url)];
+                tempData[currentStep.field] = updatedPhotos;
+            }
+            else if (!messageText) {
+                // Ignore if no text and no photos (shouldn't happen with relaxed guard but safe)
+            }
+            else {
+                // User sent text instead of photo - could warn or ignore
+            }
         }
-        // Transform and save
-        const transformedValue = currentStep.transform
-            ? currentStep.transform(messageText)
-            : messageText;
-        tempData[currentStep.field] = transformedValue;
+        else if (!tempData[currentStep.field]) {
+            const isValid = currentStep.validation ? currentStep.validation(messageText, attachments) : true;
+            if (!isValid) {
+                const errorReply = "❌ မှားယွင်းနေပါသည်။ ပြန်လည်ရိုက်ပေးပါ။\n\n" +
+                    currentStep.question;
+                await saveReplyMessage(conversation, flow, errorReply);
+                return {
+                    reply: errorReply,
+                    temp_data: tempData,
+                    order_complete: false,
+                    business_type: businessType,
+                };
+            }
+            // Transform and save
+            const transformedValue = currentStep.transform
+                ? currentStep.transform(messageText, attachments)
+                : messageText;
+            tempData[currentStep.field] = transformedValue;
+        }
     }
     // After saving, re-evaluate active steps (skipIf may change based on new data)
     const updatedActiveSteps = getActiveSteps(mergedSteps, tempData);
@@ -452,10 +493,16 @@ export async function runConversationEngine(conversation, messageText, flow, isR
         .update({ temp_data: tempData })
         .eq("id", conversation.id);
     // Check if all active steps are completed
-    const allComplete = updatedActiveSteps.every(step => tempData[step.field] !== undefined);
+    const allComplete = updatedActiveSteps.every((step) => {
+        if (step.type === 'media' && step.requiredCount) {
+            return (tempData[step.field] || []).length >= step.requiredCount;
+        }
+        return tempData[step.field] !== undefined;
+    });
     let reply;
     let isComplete = false;
     if (allComplete) {
+        // ... (existing completion logic)
         // Generate order/reference number
         const orderNo = generateOrderNumber(businessType);
         // Custom Completion Message from Metadata?
@@ -485,13 +532,30 @@ export async function runConversationEngine(conversation, messageText, flow, isR
             .eq("id", conversation.id);
     }
     else {
-        // Find next unanswered step
-        const nextStep = updatedActiveSteps.find(step => !tempData[step.field]);
+        // Find next unanswered or incomplete step
+        const nextStep = updatedActiveSteps.find((step) => {
+            if (step.type === 'media' && step.requiredCount) {
+                return (tempData[step.field] || []).length < step.requiredCount;
+            }
+            return !tempData[step.field];
+        });
         if (nextStep) {
-            const completedCount = updatedActiveSteps.filter(s => tempData[s.field] !== undefined).length;
+            const completedCount = updatedActiveSteps.filter((s) => {
+                if (s.type === 'media' && s.requiredCount) {
+                    return (tempData[s.field] || []).length >= s.requiredCount;
+                }
+                return tempData[s.field] !== undefined;
+            }).length;
             const totalCount = updatedActiveSteps.length;
-            const progress = `📊 ${completedCount}/${totalCount}`;
-            reply = `${progress}\n\n${nextStep.question}`;
+            const flowProgress = `📊 ${completedCount}/${totalCount}`;
+            if (nextStep.type === 'media' && nextStep.requiredCount) {
+                const currentMediaCount = (tempData[nextStep.field] || []).length;
+                const mediaProgress = `📸 ${currentMediaCount}/${nextStep.requiredCount} ပုံ ရရှိပြီးပါပြီ`;
+                reply = `${flowProgress}\n\n${mediaProgress}\n\n${nextStep.question}`;
+            }
+            else {
+                reply = `${flowProgress}\n\n${nextStep.question}`;
+            }
         }
         else {
             reply = flowDef.incompleteMessage;

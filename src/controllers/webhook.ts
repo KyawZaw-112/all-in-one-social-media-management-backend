@@ -35,12 +35,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
         const pageId = entry?.id;
         const senderId = messaging?.sender?.id;
-        const messageText = messaging?.message?.text;
+        const messageText = messaging?.message?.text || "";
+        const attachments = messaging?.message?.attachments || [];
 
-        console.log("📝 Parsed Webhook Data:", { pageId, senderId, messageText: messageText?.substring(0, 20) });
+        console.log("📝 Parsed Webhook Data:", { pageId, senderId, messageText: messageText?.substring(0, 20), attachmentCount: attachments.length });
 
-        if (!pageId || !senderId || !messageText) {
-            console.log("⚠️ Missing required data (pageId/senderId/messageText)");
+        if (!pageId || !senderId || (!messageText && attachments.length === 0)) {
+            console.log("⚠️ Missing required data (pageId/senderId/messageText/attachments)");
             return res.sendStatus(200);
         }
 
@@ -326,7 +327,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
             // 5️⃣ Run conversation engine
             console.log("⚙️ Running Conversation Engine. Resuming:", isResuming);
-            const result = await runConversationEngine(conversation, messageText, flow, isResuming);
+            const result = await runConversationEngine(conversation, messageText, flow, attachments, isResuming);
             console.log("🤖 Engine Result (Summary):", { replyLength: result.reply.length, complete: result.order_complete });
 
             // 6️⃣ Completion Logic
