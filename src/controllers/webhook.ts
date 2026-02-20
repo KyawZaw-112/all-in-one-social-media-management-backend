@@ -356,11 +356,25 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
                         page_id: pageId,
-                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
+                        order_no: result.temp_data.order_no,
                         ...cleanData,
                         status: "pending",
                     });
-                    if (shipErr) {
+
+                    if (shipErr && shipErr.message.includes('column') && shipErr.message.includes('does not exist')) {
+                        console.warn("⚠️ Shipments insertion failed due to missing column, retrying without item_photos...");
+                        const { item_photos, ...safeData } = cleanData;
+                        const { error: retryErr } = await supabaseAdmin.from("shipments").insert({
+                            merchant_id: merchantId,
+                            conversation_id: conversation.id,
+                            page_id: pageId,
+                            order_no: result.temp_data.order_no,
+                            ...safeData,
+                            status: "pending",
+                        });
+                        if (retryErr) logger.error("❌ Shipment Retry Failed", retryErr);
+                        else console.log("✅ Shipment saved successfully (without photos).");
+                    } else if (shipErr) {
                         logger.error("❌ Shipment Insertion Failed", shipErr, { merchantId, conversationId: conversation.id });
                     } else {
                         console.log("✅ Shipment saved successfully.");
@@ -371,11 +385,25 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         merchant_id: merchantId,
                         conversation_id: conversation.id,
                         page_id: pageId,
-                        order_no: result.temp_data.order_no, // Explicitly save the human-readable ID
+                        order_no: result.temp_data.order_no,
                         ...cleanData,
                         status: "pending",
                     });
-                    if (orderErr) {
+
+                    if (orderErr && orderErr.message.includes('column') && orderErr.message.includes('does not exist')) {
+                        console.warn("⚠️ Orders insertion failed due to missing column, retrying without item_photos...");
+                        const { item_photos, ...safeData } = cleanData;
+                        const { error: retryErr } = await supabaseAdmin.from("orders").insert({
+                            merchant_id: merchantId,
+                            conversation_id: conversation.id,
+                            page_id: pageId,
+                            order_no: result.temp_data.order_no,
+                            ...safeData,
+                            status: "pending",
+                        });
+                        if (retryErr) logger.error("❌ Order Retry Failed", retryErr);
+                        else console.log("✅ Order saved successfully (without photos).");
+                    } else if (orderErr) {
                         logger.error("❌ Order Insertion Failed", orderErr, { merchantId, conversationId: conversation.id });
                     } else {
                         console.log("✅ Order saved successfully.");
