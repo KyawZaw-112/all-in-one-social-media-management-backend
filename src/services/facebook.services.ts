@@ -71,7 +71,7 @@ export async function subscribePageToWebhook(
         console.error("Subscribe failed:", data);
         throw new Error(data.error?.message || "Failed to subscribe webhook");
     }
-    console.log("Subscribe response:", data);
+
 }
 
 
