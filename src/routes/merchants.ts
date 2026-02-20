@@ -147,11 +147,11 @@ router.put("/flows/:id", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { name, trigger_keyword, description, is_active } = req.body;
+        const { name, trigger_keyword, description, is_active, metadata } = req.body;
 
         const { data, error } = await supabaseAdmin
             .from("automation_flows")
-            .update({ name, trigger_keyword, description, is_active })
+            .update({ name, trigger_keyword, description, is_active, metadata })
             .eq("id", id)
             .eq("merchant_id", userId)
             .select()
@@ -186,8 +186,11 @@ router.patch("/flows/:id/toggle", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { is_active } = req.body;
-        const { data, error } = await supabaseAdmin.from("automation_flows").update({ is_active: !!is_active }).eq("id", id).eq("merchant_id", userId).select().single();
+        const { is_active, metadata } = req.body;
+        const { data, error } = await supabaseAdmin.from("automation_flows").update({
+            is_active: is_active !== undefined ? !!is_active : undefined,
+            metadata: metadata !== undefined ? metadata : undefined
+        }).eq("id", id).eq("merchant_id", userId).select().single();
         if (error) throw error;
         res.json({ success: true, data });
     } catch (error: any) {

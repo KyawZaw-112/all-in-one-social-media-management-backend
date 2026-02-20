@@ -152,6 +152,7 @@ router.put("/flows/:id", async (req, res) => {
             "description",
             "ai_prompt",
             "is_active",
+            "metadata",
         ];
 
         allowedFields.forEach((field) => {

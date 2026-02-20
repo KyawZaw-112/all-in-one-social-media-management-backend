@@ -206,7 +206,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 flow.business_type || 'online_shop',
                 senderName,
                 connection.page_name,
-
+                flow.metadata
             );
             try {
                 await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);

@@ -25,7 +25,12 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
                 business_type: "cargo",
                 trigger_keyword: "cargo, booking, ship",
                 description: "Default flow for cargo booking and shipment tracking.",
-                is_active: true
+                is_active: true,
+                metadata: {
+                    steps: {},
+                    welcome_message: null,
+                    completion_message: null
+                }
             });
         } else {
             // Check if any shop flows exist
@@ -46,7 +51,12 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
                 business_type: "online_shop",
                 trigger_keyword: "order, buy, price",
                 description: "Default flow for product inquiries and order collection.",
-                is_active: true
+                is_active: true,
+                metadata: {
+                    steps: {},
+                    welcome_message: null,
+                    completion_message: null
+                }
             });
         }
 

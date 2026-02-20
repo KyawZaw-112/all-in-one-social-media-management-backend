@@ -18,6 +18,7 @@ interface FlowStep {
 
 interface ConversationFlowDef {
     steps: FlowStep[];
+    welcomeMessage?: (senderName?: string, pageName?: string) => string;
     completionMessage: (tempData: Record<string, any>, orderNo: string) => string;
     incompleteMessage: string;
 }
@@ -56,18 +57,13 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
         {
             field: "item_name",
             question:
-                "ဝယ်ချင်သည့် ပစ္စည်းအမည် ရေးပေးပါ ✏️\n\n" +
-                "ဥပမာ:\n" +
-                '- "အနီရောင် အကျီ Size M × 2"\n' +
-                '- "Item No.5 × 1"\n' +
-                '- "Live မှာ ပြတဲ့ ဖိနပ် × 1"',
+                "ဝယ်ချင်သည့် ပစ္စည်းအမည် ရေးပေးပါ ✏️\n\n",
             validation: (v) => v.trim().length > 0,
         },
         {
             field: "item_variant",
             question:
-                "အရောင်နဲ့ အရွယ်အစား ရွေးပေးပါ 🎨\n\n" +
-                '(မသိပါက "Admin ဆုံးဖြတ်ပါ" ဟု ရိုက်ပါ)',
+                "အရောင်နဲ့ အရွယ်အစား ရွေးပေးပါ 🎨",
             validation: (v) => v.trim().length > 0,
         },
         {
@@ -103,8 +99,7 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
         {
             field: "address",
             question:
-                "ပို့ပေးရမည့် လိပ်စာ ထည့်ပေးပါ 📍\n" +
-                "(အိမ်အမှတ်၊ လမ်း၊ မြို့နယ်၊ တိုင်းဒေသကြီး)",
+                "ပို့ပေးရမည့် လိပ်စာ အပြည့်အစုံ ထည့်ပေးပါ 📍",
             validation: (v) => v.trim().length > 3,
             skipIf: (tempData) => tempData.delivery === "Pickup",
         },
@@ -120,10 +115,21 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
         },
         {
             field: "notes",
-            question: "KPay ဖြင့် ငွေလွှဲမည်ဆိုပါက Payment Note ရေးပေးပါ",
+            question: "KPay, Wave Money တို့ဖြင့် ငွေလွှဲမည်ဆိုပါက Payment Note ရေးပေးပါ",
             validation: (v) => v.trim().length > 0,
         },
     ],
+    welcomeMessage: (senderName, pageName) => {
+        const greeting = senderName ? `မင်္ဂလာပါ ${senderName} ခင်ဗျာ 🙏` : "မင်္ဂလာပါခင်ဗျာ 🙏";
+        const shop = pageName ? `${pageName} မှ ကြိုဆိုပါတယ်။` : "ကြိုဆိုပါတယ်။";
+        return (
+            `${greeting}\n` +
+            `${shop}\n\n` +
+            "🛍️ Live Sale မှာ ဝယ်ယူသည့်အတွက်\n" +
+            "ကျေးဇူးတင်ပါသည် 💖\n\n" +
+            "Order စတင်ပါမည်..."
+        );
+    },
     completionMessage: (d, orderNo) => {
         const pickupMsg = d.delivery === "Pickup"
             ? "✅ Self Pickup ရွေးချယ်ထားပါသည်\n📍 ဆိုင်လိပ်စာ Admin မှ ဆက်သွယ်ပေးပါမည်"
@@ -156,6 +162,7 @@ const ONLINE_SHOP_FLOW: ConversationFlowDef = {
 // ─── CARGO FLOW ──────────────────────────────────────────────────
 const CARGO_FLOW: ConversationFlowDef = {
     steps: [
+        // ... (remaining steps unchanged)
         {
             field: "country",
             question:
@@ -290,6 +297,18 @@ const CARGO_FLOW: ConversationFlowDef = {
             validation: (v) => v.trim().length > 3,
         },
     ],
+    welcomeMessage: (senderName, pageName) => {
+        const greeting = senderName ? `မင်္ဂလာပါ ${senderName} ခင်ဗျာ 🙏` : "မင်္ဂလာပါခင်ဗျာ 🙏";
+        const shop = pageName ? `${pageName} မှ ကြိုဆိုပါတယ်။` : "ကြိုဆိုပါတယ်။";
+        return (
+            `${greeting}\n` +
+            `${shop}\n\n` +
+            "✅ တရုတ် → မြန်မာ\n" +
+            "✅ ထိုင်း → မြန်မာ\n" +
+            "✅ ဂျပန် → မြန်မာ\n\n" +
+            "Cargo အသစ် ပို့ရန် စတင်ပါမည် 📦"
+        );
+    },
     completionMessage: (d, refNo) => {
         return (
             "ကျေးဇူးတင်ပါတယ် 🙏\n" +
@@ -339,7 +358,20 @@ const CONVERSATION_FLOWS: Record<string, ConversationFlowDef> = {
 };
 
 // ─── Welcome Messages ───────────────────────────────────────────
-export function getWelcomeMessage(businessType: string, senderName?: string, pageName?: string): string {
+export function getWelcomeMessage(businessType: string, senderName?: string, pageName?: string, flowMetadata?: any): string {
+    // If user has customized welcome message in metadata, use it
+    if (flowMetadata?.welcome_message) {
+        let msg = flowMetadata.welcome_message;
+        if (senderName) msg = msg.replace("{{senderName}}", senderName);
+        if (pageName) msg = msg.replace("{{pageName}}", pageName);
+        return msg;
+    }
+
+    const flowDef = CONVERSATION_FLOWS[businessType] || DEFAULT_FLOW;
+    if (flowDef.welcomeMessage) {
+        return flowDef.welcomeMessage(senderName, pageName);
+    }
+
     const greeting = senderName ? `မင်္ဂလာပါ ${senderName} ခင်ဗျာ 🙏` : "မင်္ဂလာပါခင်ဗျာ 🙏";
     const shop = pageName ? `${pageName} မှ ကြိုဆိုပါတယ်။` : "ကြိုဆိုပါတယ်။";
 
@@ -396,11 +428,28 @@ export async function runConversationEngine(
     isResuming: boolean = true
 ) {
     const tempData = conversation.temp_data || {};
+    // Get metadata and merge steps
+    const metadata = flow.metadata || {};
     const businessType = flow.business_type || 'default';
     const flowDef = CONVERSATION_FLOWS[businessType] || DEFAULT_FLOW;
 
+    // Merge hardcoded steps with metadata overrides and filters
+    const baseSteps = flowDef.steps;
+    const mergedSteps = baseSteps
+        .map(step => {
+            const override = metadata.steps?.[step.field];
+            if (!override) return step;
+
+            return {
+                ...step,
+                question: override.question || step.question,
+                enabled: override.enabled !== undefined ? override.enabled : true
+            };
+        })
+        .filter((step: any) => step.enabled !== false);
+
     // Get steps that are active (respect skipIf with current data)
-    const activeSteps = getActiveSteps(flowDef.steps, tempData);
+    const activeSteps = getActiveSteps(mergedSteps, tempData);
 
     // Find the current step (first step without data)
     let currentStepIndex = 0;
@@ -441,10 +490,10 @@ export async function runConversationEngine(
     }
 
     // After saving, re-evaluate active steps (skipIf may change based on new data)
-    const updatedActiveSteps = getActiveSteps(flowDef.steps, tempData);
+    const updatedActiveSteps = getActiveSteps(mergedSteps, tempData);
 
     // Auto-skip steps that should be skipped and fill default values
-    for (const step of flowDef.steps) {
+    for (const step of mergedSteps) {
         if (step.skipIf && step.skipIf(tempData) && !tempData[step.field]) {
             // Set a default value for skipped steps
             if (step.field === "address" && tempData.delivery === "Pickup") {
@@ -469,7 +518,22 @@ export async function runConversationEngine(
         // Generate order/reference number
         const orderNo = generateOrderNumber(businessType);
 
-        reply = flowDef.completionMessage(tempData, orderNo);
+        // Custom Completion Message from Metadata?
+        if (metadata.completion_message) {
+            let msg = metadata.completion_message;
+            msg = msg.replace("{{orderNo}}", orderNo);
+            msg = msg.replace("{{refNo}}", orderNo);
+            // Replace other dynamic fields from tempData
+            Object.keys(tempData).forEach(key => {
+                if (!key.startsWith('_')) {
+                    msg = msg.replace(new RegExp(`{{${key}}}`, 'g'), tempData[key]);
+                }
+            });
+            reply = msg;
+        } else {
+            reply = flowDef.completionMessage(tempData, orderNo);
+        }
+
         isComplete = true;
 
         // Store the order number in temp_data for downstream
