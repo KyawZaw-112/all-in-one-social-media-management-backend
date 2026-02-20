@@ -65,6 +65,8 @@ You are a cargo/shipping assistant. Extract shipment information:
 #### [MODIFY] [webhook.ts](file:///d:/all%20in%20one/backend/src/controllers/webhook.ts)
 - Pass business_type from matched flow to conversation engine
 - Handle business-specific order creation
+- **NEW**: Implement column filtering to prevent insertion errors when `temp_data` contains fields (like `item_photos`) not yet in the DB.
+- **NEW**: Add `item_photos` JSONB column to `orders` and `shipments` tables.
 
 ---
 
