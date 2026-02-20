@@ -267,6 +267,7 @@ export const handleWebhook = async (req, res) => {
                 sender_email: senderId,
                 sender_name: "Facebook User",
                 body: messageText,
+                content: messageText, // for compatibility
                 channel: "facebook",
                 status: "received",
                 conversation_id: conversation?.id,

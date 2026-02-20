@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
 // ─── ONLINE SHOP FLOW (Live Sale Bot) ────────────────────────────
-const ONLINE_SHOP_FLOW = {
+export const ONLINE_SHOP_FLOW = {
     steps: [
         {
             field: "order_source",
@@ -141,7 +141,7 @@ const ONLINE_SHOP_FLOW = {
     incompleteMessage: "📝 ဆက်ဖြေပေးပါ။ Please continue...",
 };
 // ─── CARGO FLOW ──────────────────────────────────────────────────
-const CARGO_FLOW = {
+export const CARGO_FLOW = {
     steps: [
         // ... (remaining steps unchanged)
         {
@@ -446,14 +446,18 @@ export async function runConversationEngine(conversation, messageText, flow, att
             const incomingPhotos = (attachments || []).filter(a => a.type === 'image');
             if (incomingPhotos.length > 0) {
                 const existingPhotos = tempData[currentStep.field] || [];
-                const updatedPhotos = [...existingPhotos, ...incomingPhotos.map(p => p.payload?.url || p.url)];
+                // Filter out URLs that are already in existingPhotos to prevent double-counting
+                const newPhotoUrls = incomingPhotos.map(p => p.payload?.url || p.url).filter(url => !existingPhotos.includes(url));
+                const updatedPhotos = [...existingPhotos, ...newPhotoUrls];
                 tempData[currentStep.field] = updatedPhotos;
+                delete tempData[`_warn_${currentStep.field}`];
             }
             else if (!messageText) {
                 // Ignore if no text and no photos (shouldn't happen with relaxed guard but safe)
             }
             else {
-                // User sent text instead of photo - could warn or ignore
+                // User sent text instead of photo - set a warn flag to show tip
+                tempData[`_warn_${currentStep.field}`] = true;
             }
         }
         else if (!tempData[currentStep.field]) {
@@ -551,7 +555,8 @@ export async function runConversationEngine(conversation, messageText, flow, att
             if (nextStep.type === 'media' && nextStep.requiredCount) {
                 const currentMediaCount = (tempData[nextStep.field] || []).length;
                 const mediaProgress = `📸 ${currentMediaCount}/${nextStep.requiredCount} ပုံ ရရှိပြီးပါပြီ`;
-                reply = `${flowProgress}\n\n${mediaProgress}\n\n${nextStep.question}`;
+                const warnTip = tempData[`_warn_${nextStep.field}`] ? "⚠️ (စာမဟုတ်ဘဲ ပစ္စည်းပုံ သီးသန့် ပို့ပေးပါခင်ဗျာ)\n\n" : "";
+                reply = `${flowProgress}\n\n${mediaProgress}\n\n${warnTip}${nextStep.question}`;
             }
             else {
                 reply = `${flowProgress}\n\n${nextStep.question}`;
@@ -578,6 +583,7 @@ async function saveReplyMessage(conversation, flow, reply) {
         sender_email: "AI-Assistant",
         sender_name: "Auto-Reply Bot",
         body: reply,
+        content: reply, // Added for compatibility with updated schema
         channel: "facebook",
         status: "replied",
         created_at: new Date().toISOString(),
