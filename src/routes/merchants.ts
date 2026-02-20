@@ -337,9 +337,9 @@ router.patch("/orders/:id/status", requireAuth, async (req: any, res) => {
 
         // 🟢 Automated Facebook Notification for Approved Orders
         if (status === 'approved' && data?.conversation_id) {
-            const merchant = await getMerchant(userId);
-            const lang = merchant?.subscription_plan === 'online_shop' ? 'my' : 'en'; // Simple heuristic or use a field
-            const msg = lang === 'my' ? "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏" : "Thank you for your order! 🙏";
+            const orderNo = data.order_no || `#...${data.id.slice(-6).toUpperCase()}`;
+            const msg = `လူကြီးမင်း၏ မှာယူမှု (${orderNo}) အား အတည်ပြုပြီးပါပြီ။ မှာယူမှုအတွက် ကျေးဇူးတင်ပါတယ် 🙏`;
+            // Simplified: Default to Burmese as requested, or can add logic for English if needed.
             handleStatusApproved(data.conversation_id, userId, msg);
         }
 
@@ -372,9 +372,8 @@ router.patch("/shipments/:id/status", requireAuth, async (req: any, res) => {
 
         // 🟢 Automated Facebook Notification for Approved Shipments
         if (status === 'approved' && data?.conversation_id) {
-            const merchant = await getMerchant(userId);
-            const lang = merchant?.subscription_plan === 'online_shop' ? 'my' : 'en';
-            const msg = lang === 'my' ? "မှာယူမှု အတွက် ကျေးဇူးတင်ပါတယ် 🙏" : "Thank you for your order! 🙏";
+            const refNo = data.order_no || `#...${data.id.slice(-6).toUpperCase()}`;
+            const msg = `လူကြီးမင်း၏ ပို့ဆောင်မှုတောင်းဆိုမှု (${refNo}) အား အတည်ပြုပြီးပါပြီ။ ကျေးဇူးတင်ပါတယ် 🙏`;
             handleStatusApproved(data.conversation_id, userId, msg);
         }
 
@@ -407,7 +406,7 @@ async function handleStatusApproved(conversationId: string, merchantId: string, 
         const { data: conn } = await supabaseAdmin
             .from("platform_connections")
             .select("page_access_token")
-            .eq("platform_page_id", conv.page_id)
+            .eq("page_id", conv.page_id)
             .maybeSingle();
 
         if (!conn?.page_access_token) {
