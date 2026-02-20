@@ -24,6 +24,7 @@ app.use(cors({
         "http://localhost:3000",
         "https://ashy.vercel.app",
         "https://all-in-one-social-media-management-ashy.vercel.app",
+        "https://all-in-one-social-media-management-frontend-eta.vercel.app",
         process.env.FRONTEND_URL || ""
     ].filter(Boolean),
     credentials: true,
