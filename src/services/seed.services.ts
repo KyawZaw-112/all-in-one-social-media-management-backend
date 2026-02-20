@@ -8,6 +8,17 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
         console.log(`🌱 Seeding default flows for merchant ${merchantId} (${businessType})`);
 
         if (businessType === 'cargo') {
+            // Check if any cargo flows exist
+            const { count } = await supabaseAdmin
+                .from("automation_flows")
+                .select("*", { count: "exact", head: true })
+                .eq("merchant_id", merchantId);
+
+            if (count && count > 0) {
+                console.log(`ℹ️ Merchant ${merchantId} already has flows, skipping seed.`);
+                return;
+            }
+
             await supabaseAdmin.from("automation_flows").insert({
                 merchant_id: merchantId,
                 name: "Cargo Booking Flow",
@@ -16,10 +27,18 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
                 description: "Default flow for cargo booking and shipment tracking.",
                 is_active: true
             });
-
-            // Optionally seed matching auto-reply template if needed
-            // For now, focus on the flow definition
         } else {
+            // Check if any shop flows exist
+            const { count } = await supabaseAdmin
+                .from("automation_flows")
+                .select("*", { count: "exact", head: true })
+                .eq("merchant_id", merchantId);
+
+            if (count && count > 0) {
+                console.log(`ℹ️ Merchant ${merchantId} already has flows, skipping seed.`);
+                return;
+            }
+
             // Default to online_shop
             await supabaseAdmin.from("automation_flows").insert({
                 merchant_id: merchantId,

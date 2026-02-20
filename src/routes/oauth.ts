@@ -148,6 +148,9 @@ router.get("/facebook/callback", async (req, res) => {
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
             if (merchError) logger.error("Failed to create missing merchant", merchError, { userId });
+
+            // 🔥 Seed default flows for auto-created merchant
+            await seedDefaultFlows(userId, "online_shop");
         } else {
             console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
@@ -182,6 +185,10 @@ router.get("/facebook/callback", async (req, res) => {
                 business_name: page.name,
             })
             .eq("id", userId);
+
+        // 🔥 Fallback seeding (idempotent): Ensure they have at least one flow
+        const bType = existingMerchant?.business_type || "online_shop";
+        await seedDefaultFlows(userId, bType);
 
         // Subscribe Webhook
         console.log(`📡 Subscribing Page ${page.id} to webhooks...`);
