@@ -137,6 +137,13 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             ? "✅ Self Pickup ရွေးချယ်ထားပါသည်\n📍 ဆိုင်လိပ်စာ Admin မှ ဆက်သွယ်ပေးပါမည်"
             : `📍 လိပ်စာ      : ${d.address || "-"}`;
 
+        const itemPrice = d.item_price || 0;
+        const qty = d.quantity || 1;
+        const total = itemPrice * qty;
+        const priceMsg = itemPrice > 0
+            ? `💰 စုစုပေါင်း    : ${total.toLocaleString()} ${d.currency || 'MMK'}\n`
+            : "";
+
         return (
             "🎉 Order လက်ခံပြီးပါပြီ!\n\n" +
             "━━━━━━━━━━━━━━━━━━━━\n" +
@@ -152,6 +159,7 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             `${d.item_variant || "-"}\n` +
             `🔢 အရေအတွက်   : \n` +
             `${d.quantity || "-"}\n` +
+            priceMsg +
             `🚚 ပို့ဆောင်မှု  : \n` +
             `${d.delivery || "-"}\n` +
             `${pickupMsg}\n` +
@@ -333,6 +341,17 @@ export const CARGO_FLOW: ConversationFlowDef = {
         );
     },
     completionMessage: (d, refNo) => {
+        const ratePerKg = d.rate_per_kg || 0;
+        const weightText = d.weight || "";
+        const numericWeight = parseFloat(weightText.replace(/[^\d.]/g, ''));
+
+        let costMsg = "";
+        if (!isNaN(numericWeight) && ratePerKg > 0) {
+            const total = numericWeight * ratePerKg;
+            costMsg = `💰 ခန့်မှန်းကုန်ကျစရိတ်: \n${total.toLocaleString()} ${d.currency || 'THB'}\n` +
+                `(Rate: ${ratePerKg.toLocaleString()} / kg)\n`;
+        }
+
         return (
             "ကျေးဇူးတင်ပါတယ် 🙏\n" +
             "သင်၏ Cargo Request လက်ခံပြီးပါပြီ။\n\n" +
@@ -351,6 +370,7 @@ export const CARGO_FLOW: ConversationFlowDef = {
             `${d.item_name || "-"}\n` +
             `⚖️ အလေးချိန်: \n` +
             `${d.weight || "-"}\n` +
+            costMsg +
             `💰 တန်ဖိုး: \n` +
             `${d.item_value || "-"}\n` +
             "━━━━━━━━━━━━━━━━━━━━\n" +
@@ -445,6 +465,41 @@ function generateOrderNumber(businessType: string): string {
     return `LS${random}`;
 }
 
+// ─── Fetch Merchant Products ───────────────────────────────────
+async function fetchMerchantProducts(merchantId: string) {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("products")
+            .select("*")
+            .eq("merchant_id", merchantId)
+            .eq("is_active", true)
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error("Failed to fetch products for engine:", err);
+        return [];
+    }
+}
+
+// ─── Fetch Merchant Shipping Rates ──────────────────────────────
+async function fetchMerchantRates(merchantId: string) {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("shipping_rates")
+            .select("*")
+            .eq("merchant_id", merchantId)
+            .eq("is_active", true);
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error("Failed to fetch rates for engine:", err);
+        return [];
+    }
+}
+
 // ─── Get Active Steps (respecting skipIf) ────────────────────────
 function getActiveSteps(steps: FlowStep[], tempData: Record<string, any>): FlowStep[] {
     return steps.filter(step => {
@@ -467,11 +522,104 @@ export async function runConversationEngine(
     const businessType = flow.business_type || 'default';
     const flowDef = CONVERSATION_FLOWS[businessType] || DEFAULT_FLOW;
 
+    // 1️⃣ Fetch data if applicable
+    const merchantId = flow.merchant_id || conversation.merchant_id;
+    let products: any[] = [];
+    let rates: any[] = [];
+
+    if (businessType === 'online_shop') {
+        products = await fetchMerchantProducts(merchantId);
+    } else if (businessType === 'cargo') {
+        rates = await fetchMerchantRates(merchantId);
+    }
+
     // Merge hardcoded steps with metadata overrides and filters
     const baseSteps = flowDef.steps;
     const mergedSteps = baseSteps
         .map((step: any) => {
             const override = metadata.steps?.[step.field];
+
+            // Online Shop Product Logic
+            if (step.field === 'item_name' && products.length > 0) {
+                const productList = products.map((p, i) => `${i + 1}️⃣ ${p.name} — ${p.price.toLocaleString()} ${p.currency}`).join('\n');
+                return {
+                    ...step,
+                    question: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n\n${productList}\n\n(နံပါတ် ရိုက်ပေးပါ)`,
+                    validation: (v: string) => {
+                        const n = parseInt(v);
+                        return n >= 1 && n <= products.length;
+                    },
+                    transform: (v: string) => {
+                        const n = parseInt(v);
+                        const p = products[n - 1];
+                        // Store price and currency for later
+                        tempData.item_id = p.id;
+                        tempData.item_price = p.price;
+                        tempData.currency = p.currency;
+                        return p.name;
+                    }
+                };
+            }
+
+            if (step.field === 'item_variant' && products.length > 0 && tempData.item_id) {
+                const selectedProduct = products.find(p => p.id === tempData.item_id);
+                if (selectedProduct && selectedProduct.variants) {
+                    return {
+                        ...step,
+                        question: `အရောင်နဲ့ အရွယ်အစား ရွေးပေးပါ 🎨\n\n(ဥပမာ - ${selectedProduct.variants})`
+                    };
+                }
+            }
+
+            // Cargo Rates Logic
+            if (businessType === 'cargo' && rates.length > 0) {
+                if (step.field === 'country') {
+                    const countries = Array.from(new Set(rates.map(r => r.country)));
+                    const countryList = countries.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n');
+                    return {
+                        ...step,
+                        question: `ပစ္စည်း ဘယ်နိုင်ငံကနေ ပို့မှာလဲ? 🌏\n\n${countryList}\n\n(နံပါတ် သို့မဟုတ် နိုင်ငံအမည် ရိုက်ပါ)`,
+                        validation: (v: string) => {
+                            const n = parseInt(v);
+                            if (n >= 1 && n <= countries.length) return true;
+                            return countries.some(c => v.includes(c));
+                        },
+                        transform: (v: string) => {
+                            const n = parseInt(v);
+                            if (n >= 1 && n <= countries.length) return countries[n - 1];
+                            return countries.find(c => v.includes(c)) || v;
+                        }
+                    };
+                }
+
+                if (step.field === 'shipping' && tempData.country) {
+                    const countryRates = rates.filter(r => r.country === tempData.country);
+                    const typeList = countryRates.map((r, i) => `${i + 1}️⃣ ${r.shipping_type}`).join('\n');
+                    return {
+                        ...step,
+                        question: `ပို့ဆောင်မှု အမျိုးအစား ရွေးပါ ✈️🚢\n\n${typeList}\n\n(နံပါတ် သို့မဟုတ် အမျိုးအစား ရိုက်ပါ)`,
+                        validation: (v: string) => {
+                            const n = parseInt(v);
+                            if (n >= 1 && n <= countryRates.length) return true;
+                            return countryRates.some(r => v.includes(r.shipping_type));
+                        },
+                        transform: (v: string) => {
+                            const n = parseInt(v);
+                            const r = (n >= 1 && n <= countryRates.length)
+                                ? countryRates[n - 1]
+                                : countryRates.find(rate => v.includes(rate.shipping_type));
+
+                            if (r) {
+                                tempData.rate_per_kg = r.rate_per_kg;
+                                tempData.currency = r.currency;
+                                return r.shipping_type;
+                            }
+                            return v;
+                        }
+                    };
+                }
+            }
+
             if (!override) return step;
 
             return {
