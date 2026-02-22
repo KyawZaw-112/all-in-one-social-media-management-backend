@@ -1,6 +1,6 @@
-import "./env.js";
-import { subscribePageToWebhook } from "./services/facebook.services.js";
-import { supabaseAdmin } from "./supabaseAdmin.js";
+import "../env.js";
+import { subscribePageToWebhook } from "../services/facebook.services.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
 
 async function forceResubscribe(pageId: string) {
     console.log(`\n🔄 Force Re-subscribing Page ID: ${pageId}`);
