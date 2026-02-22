@@ -21,8 +21,22 @@ export const verifyWebhook = (req: Request, res: Response) => {
 
 export const handleWebhook = async (req: Request, res: Response) => {
     const body = req.body as FacebookWebhookPayload;
-    // VERY NOISY but necessary to see if Tester messages arrive at all
     console.log("📥 [RAW WEBHOOK]", JSON.stringify(body));
+
+    // 🔬 DEBUG: Log raw webhook to DB for real-time monitoring
+    try {
+        await supabaseAdmin.from("messages").insert({
+            user_id: "00000000-0000-0000-0000-000000000000", // System log
+            sender_id: "SYSTEM_DEBUG",
+            sender_name: "RAW_WEBHOOK_LOGGER",
+            body: JSON.stringify(body),
+            channel: "facebook",
+            status: "received",
+            metadata: { type: "raw_log", page_id: body.entry?.[0]?.id }
+        });
+    } catch (e) {
+        console.error("Failed to log raw webhook to DB:", e);
+    }
 
     try {
         const entry = body.entry?.[0];

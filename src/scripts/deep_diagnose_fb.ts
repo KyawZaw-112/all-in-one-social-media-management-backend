@@ -54,7 +54,10 @@ async function diagnoseToken(pageId: string) {
 }
 
 async function run() {
-    await diagnoseToken("957808180755824"); // Bluh bluh
+    // Kay
+    await diagnoseToken("100530332303174");
+    // Bluh bluh
+    await diagnoseToken("957808180755824");
 }
 
 run().catch(console.error);

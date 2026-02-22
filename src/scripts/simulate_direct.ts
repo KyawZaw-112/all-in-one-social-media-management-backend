@@ -76,7 +76,14 @@ async function simulateDirect(pageId: string, senderId: string, text: string) {
 }
 
 async function run() {
-    await simulateDirect("957808180755824", "sim_direct_user_999", "order");
+    // Test Kay
+    await simulateDirect("100530332303174", "sim_kay_user", "buy");
+
+    // Give some time
+    await new Promise(r => setTimeout(r, 5000));
+
+    // Test Bluh bluh
+    await simulateDirect("957808180755824", "sim_bluh_user", "cargo");
 }
 
 run().catch(console.error);
