@@ -73,7 +73,9 @@ router.delete("/:pageId", requireAuth, async (req: any, res) => {
 
         if (error) throw error;
 
-        // 2. Delete ALL automation flows for this user
+        // 2. [DISABLED] Delete ALL automation flows for this user
+        // We preserve flows even if page is disconnected to avoid data loss
+        /*
         const { error: flowError } = await supabaseAdmin
             .from("automation_flows")
             .delete()
@@ -102,6 +104,7 @@ router.delete("/:pageId", requireAuth, async (req: any, res) => {
         if (ruleError) {
             console.error("Failed to delete auto-reply rules:", ruleError);
         }
+        */
 
         // 5. Clear page_id from merchant profile
         await supabaseAdmin
