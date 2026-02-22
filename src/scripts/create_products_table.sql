@@ -59,6 +59,7 @@ CREATE TABLE shipping_rates (
     merchant_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     country TEXT NOT NULL,
     shipping_type TEXT NOT NULL,
+    item_category TEXT NOT NULL DEFAULT 'General',
     rate_per_kg NUMERIC NOT NULL DEFAULT 0,
     currency TEXT DEFAULT 'THB',
     is_active BOOLEAN DEFAULT true,

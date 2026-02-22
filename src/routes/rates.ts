@@ -29,18 +29,18 @@ router.get("/", requireAuth, async (req: any, res) => {
 router.post("/", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
-        const { country, shipping_type, rate_per_kg, currency } = req.body;
+        const { country, shipping_type, item_category, rate_per_kg, currency } = req.body;
 
         if (!country || !shipping_type || rate_per_kg === undefined) {
             return res.status(400).json({ error: "country, shipping_type, and rate_per_kg are required" });
         }
-
         const { data, error } = await supabaseAdmin
             .from("shipping_rates")
             .insert({
                 merchant_id: userId,
                 country,
                 shipping_type,
+                item_category: item_category || "General",
                 rate_per_kg,
                 currency: currency || "THB",
             })
@@ -110,10 +110,10 @@ router.delete("/:id", requireAuth, async (req: any, res) => {
 router.post("/calculate", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
-        const { country, shipping_type, weight_kg } = req.body;
+        const { country, shipping_type, item_category, weight_kg } = req.body;
 
-        if (!country || !shipping_type || !weight_kg) {
-            return res.status(400).json({ error: "country, shipping_type, and weight_kg are required" });
+        if (!country || !shipping_type || !item_category || !weight_kg) {
+            return res.status(400).json({ error: "country, shipping_type, item_category, and weight_kg are required" });
         }
 
         const { data: rate } = await supabaseAdmin
@@ -122,11 +122,12 @@ router.post("/calculate", requireAuth, async (req: any, res) => {
             .eq("merchant_id", userId)
             .eq("country", country)
             .eq("shipping_type", shipping_type)
+            .eq("item_category", item_category)
             .eq("is_active", true)
             .maybeSingle();
 
         if (!rate) {
-            return res.status(404).json({ error: "No rate found for this route. Please add a rate first." });
+            return res.status(404).json({ error: "No rate found for this route and category. Please add a rate first." });
         }
 
         const total = rate.rate_per_kg * weight_kg;
@@ -136,6 +137,7 @@ router.post("/calculate", requireAuth, async (req: any, res) => {
             data: {
                 country,
                 shipping_type,
+                item_category,
                 weight_kg,
                 rate_per_kg: rate.rate_per_kg,
                 currency: rate.currency,

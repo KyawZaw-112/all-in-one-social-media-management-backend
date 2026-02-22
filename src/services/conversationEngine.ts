@@ -594,29 +594,56 @@ export async function runConversationEngine(
 
                 if (step.field === 'shipping' && tempData.country) {
                     const countryRates = rates.filter(r => r.country === tempData.country);
-                    const typeList = countryRates.map((r, i) => `${i + 1}️⃣ ${r.shipping_type}`).join('\n');
+                    const types = Array.from(new Set(countryRates.map(r => r.shipping_type)));
+                    const typeList = types.map((t, i) => `${i + 1}️⃣ ${t}`).join('\n');
                     return {
                         ...step,
                         question: `ပို့ဆောင်မှု အမျိုးအစား ရွေးပါ ✈️🚢\n\n${typeList}\n\n(နံပါတ် သို့မဟုတ် အမျိုးအစား ရိုက်ပါ)`,
                         validation: (v: string) => {
                             const n = parseInt(v);
-                            if (n >= 1 && n <= countryRates.length) return true;
-                            return countryRates.some(r => v.includes(r.shipping_type));
+                            if (n >= 1 && n <= types.length) return true;
+                            return types.some(t => v.includes(t));
                         },
                         transform: (v: string) => {
                             const n = parseInt(v);
-                            const r = (n >= 1 && n <= countryRates.length)
-                                ? countryRates[n - 1]
-                                : countryRates.find(rate => v.includes(rate.shipping_type));
-
-                            if (r) {
-                                tempData.rate_per_kg = r.rate_per_kg;
-                                tempData.currency = r.currency;
-                                return r.shipping_type;
-                            }
-                            return v;
+                            if (n >= 1 && n <= types.length) return types[n - 1];
+                            return types.find(t => v.includes(t)) || v;
                         }
                     };
+                }
+
+                if (step.field === 'item_type' && tempData.country && tempData.shipping) {
+                    const filteredRates = rates.filter(r => r.country === tempData.country && r.shipping_type === tempData.shipping);
+                    const categories = Array.from(new Set(filteredRates.map(r => r.item_category)));
+
+                    if (categories.length > 0) {
+                        const catList = categories.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n');
+                        return {
+                            ...step,
+                            question: `ပစ္စည်းအမျိုးအစား ရွေးပေးပါ 📦\n\n${catList}\n\n(နံပါတ် သို့မဟုတ် အမျိုးအစား ရိုက်ပေးပါ)`,
+                            validation: (v: string) => {
+                                const n = parseInt(v);
+                                if (n >= 1 && n <= categories.length) return true;
+                                return categories.some(c => v.toLowerCase().includes(c.toLowerCase()));
+                            },
+                            transform: (v: string) => {
+                                const n = parseInt(v);
+                                const selectedCat = (n >= 1 && n <= categories.length)
+                                    ? categories[n - 1]
+                                    : categories.find(c => v.toLowerCase().includes(c.toLowerCase()));
+
+                                if (selectedCat) {
+                                    const matchingRate = filteredRates.find(r => r.item_category === selectedCat);
+                                    if (matchingRate) {
+                                        tempData.rate_per_kg = matchingRate.rate_per_kg;
+                                        tempData.currency = matchingRate.currency;
+                                    }
+                                    return selectedCat;
+                                }
+                                return v;
+                            }
+                        };
+                    }
                 }
             }
 

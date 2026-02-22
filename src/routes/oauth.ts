@@ -140,11 +140,19 @@ router.get("/facebook/callback", async (req, res) => {
 
         // 🔥 FIX: Liberate page_id from any other merchant record to avoid unique constraint violation
         console.log(`🔓 Liberating page_id ${page.id} from other records...`);
+        // 1. Liberate in merchants
         await supabaseAdmin
             .from("merchants")
             .update({ page_id: `liberated-${Date.now()}-${page.id}` })
             .eq("page_id", page.id)
             .neq("id", userId);
+
+        // 2. Liberate in platform_connections (by deleting old connections for this page)
+        await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("page_id", page.id)
+            .neq("user_id", userId);
 
         if (!existingMerchant) {
             console.log("⚠️ Creating missing merchant record during FB callback for user:", userId);
