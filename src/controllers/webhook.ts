@@ -253,10 +253,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     sender_email: "AI-Assistant",
                     sender_name: "Auto-Reply Bot",
                     body: welcomeMsg,
-                    content: welcomeMsg,
+                    // content: welcomeMsg,
                     channel: "facebook",
                     status: "replied",
-                    conversation_id: conversation.id
+                    // conversation_id: conversation.id
+                    metadata: { conversation_id: conversation.id }
                 });
             } catch (welcomeErr) {
                 logger.warn("⚠️ Welcome message send failed (non-critical)", welcomeErr);

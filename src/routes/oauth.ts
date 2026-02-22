@@ -59,9 +59,11 @@ router.get("/facebook", async (req, res) => {
 router.get("/facebook/callback", async (req, res) => {
     try {
         const { code, state } = req.query;
+        console.log("📥 Received FB Callback (code exists:", !!code, "state:", state, ")");
 
         const userId = state as string;
 
+        console.log("📡 Fetching user access token...");
         const tokenRes = await axios.get(
             "https://graph.facebook.com/v19.0/oauth/access_token",
             {
@@ -147,7 +149,10 @@ router.get("/facebook/callback", async (req, res) => {
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
-            if (merchError) logger.error("Failed to create missing merchant", merchError, { userId });
+            if (merchError) {
+                console.error("❌ Failed to create missing merchant:", merchError);
+                throw merchError;
+            }
 
             // 🔥 Seed default flows for auto-created merchant
             await seedDefaultFlows(userId, "online_shop");
@@ -155,7 +160,7 @@ router.get("/facebook/callback", async (req, res) => {
             console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
 
-
+        console.log("💾 Upserting platform_connection...");
         const { error: insertError } = await supabaseAdmin
             .from("platform_connections")
             .upsert(
@@ -178,13 +183,19 @@ router.get("/facebook/callback", async (req, res) => {
         }
 
         // Update Merchant Profile with Page Info
-        await supabaseAdmin
+        console.log(`📝 Updating merchant ${userId} with page_id: ${page.id}`);
+        const { error: updateError } = await supabaseAdmin
             .from("merchants")
             .update({
                 page_id: page.id,
                 business_name: page.name,
             })
             .eq("id", userId);
+
+        if (updateError) {
+            console.error("❌ Failed to update merchant page_id:", updateError);
+            throw updateError;
+        }
 
         // 🔥 Fallback seeding (idempotent): Ensure they have at least one flow
         const bType = existingMerchant?.business_type || "online_shop";
@@ -198,7 +209,11 @@ router.get("/facebook/callback", async (req, res) => {
 
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     } catch (error: any) {
-        logger.error("OAuth Error", error, { userId: req.query.state });
+        console.error("🔥 OAuth Callback Exception:", error);
+        console.error("Error Message:", error.message);
+        if (error.response) {
+            console.error("FB API Error Response:", JSON.stringify(error.response.data, null, 2));
+        }
         const errorMsg = encodeURIComponent(error.message || "OAuth validation failed");
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?error=true&message=${errorMsg}`);
     }
