@@ -265,7 +265,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
             });
 
             // Transition to engine logic immediately for first question
-            isResuming = true;
+            // We set isResuming to FALSE here so the engine doesn't try to 
+            // validate the trigger message (e.g. "cargo") as the first answer.
+            isResuming = false;
         } else {
             console.log("♻️ Resuming active conversation:", conversation.id);
 

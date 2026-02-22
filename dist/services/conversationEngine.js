@@ -147,10 +147,10 @@ export const CARGO_FLOW = {
         {
             field: "country",
             question: "ပစ္စည်း ဘယ်နိုင်ငံကနေ ပို့မှာလဲ? 🌏\n\n" +
-                "1️⃣ 🇨🇳 တရုတ်\n" +
-                "2️⃣ 🇹🇭 ထိုင်း\n" +
-                "3️⃣ 🇯🇵 ဂျပန်\n" +
-                "4️⃣ 🌍 အခြား",
+                "1️⃣ 🇨🇳 တရုတ် (China)\n" +
+                "2️⃣ 🇹🇭 ထိုင်း (Thailand)\n" +
+                "3️⃣ 🇯🇵 ဂျပန် (Japan)\n" +
+                "4️⃣ 🌍 အခြား (Other)",
             options: [
                 { label: "တရုတ်", value: "တရုတ်" },
                 { label: "ထိုင်း", value: "ထိုင်း" },
@@ -159,9 +159,10 @@ export const CARGO_FLOW = {
             ],
             validation: (v) => {
                 const n = parseInt(v);
-                return (n >= 1 && n <= 4) ||
-                    ["တရုတ်", "ထိုင်း", "ဂျပန်", "china", "thai", "japan"].some(k => v.toLowerCase().includes(k)) ||
-                    v.trim().length > 0;
+                if (n >= 1 && n <= 4)
+                    return true;
+                const lower = v.toLowerCase().trim();
+                return ["တရုတ်", "ထိုင်း", "ဂျပန်", "china", "thai", "japan", "အခြား", "other"].some(k => lower.includes(k));
             },
             transform: (v) => {
                 const n = parseInt(v);
@@ -181,7 +182,7 @@ export const CARGO_FLOW = {
         {
             field: "shipping",
             question: "ပို့ဆောင်မှု အမျိုးအစား ရွေးပါ ✈️🚢\n\n" +
-                "1️⃣ ✈️ လေကြောင်း\n" +
+                "1️⃣ ✈️ လေကြောင်း (Air)\n" +
                 "2️⃣ ⚡ Express",
             options: [
                 { label: "လေကြောင်း", value: "လေကြောင်း" },
@@ -189,8 +190,10 @@ export const CARGO_FLOW = {
             ],
             validation: (v) => {
                 const n = parseInt(v);
-                return (n >= 1 && n <= 2) ||
-                    ["လေ", "ရေ", "express", "air", "sea"].some(k => v.toLowerCase().includes(k));
+                if (n >= 1 && n <= 2)
+                    return true;
+                const lower = v.toLowerCase().trim();
+                return ["လေ", "express", "air"].some(k => lower.includes(k));
             },
             transform: (v) => {
                 const n = parseInt(v);
@@ -200,8 +203,6 @@ export const CARGO_FLOW = {
                 const lower = v.toLowerCase();
                 if (lower.includes("လေ") || lower.includes("air"))
                     return "လေကြောင်း";
-                if (lower.includes("ရေ") || lower.includes("sea"))
-                    return "ရေကြောင်း";
                 if (lower.includes("express"))
                     return "Express";
                 return v;
@@ -226,7 +227,10 @@ export const CARGO_FLOW = {
             ],
             validation: (v) => {
                 const n = parseInt(v);
-                return (n >= 1 && n <= 6) || v.trim().length > 0;
+                if (n >= 1 && n <= 6)
+                    return true;
+                const lower = v.toLowerCase().trim();
+                return ["elec", "အဝတ်", "အထည်", "cosm", "အစား", "သောက်", "စက်", "gen"].some(k => lower.includes(k));
             },
             transform: (v) => {
                 const n = parseInt(v);
@@ -236,7 +240,18 @@ export const CARGO_FLOW = {
                 };
                 if (map[n])
                     return map[n];
-                return v;
+                const lower = v.toLowerCase();
+                if (lower.includes("elec"))
+                    return "Electronics";
+                if (lower.includes("အဝတ်") || lower.includes("အထည်"))
+                    return "အဝတ်အထည်";
+                if (lower.includes("cosm"))
+                    return "Cosmetics";
+                if (lower.includes("အစား") || lower.includes("သောက်"))
+                    return "အစားအသောက်";
+                if (lower.includes("စက်"))
+                    return "စက်ပစ္စည်း";
+                return "General";
             },
         },
         {
@@ -551,7 +566,7 @@ export async function runConversationEngine(conversation, messageText, flow, att
                 return tempData[s.field] !== undefined;
             }).length;
             const totalCount = updatedActiveSteps.length;
-            const flowProgress = `📊 ${completedCount}/${totalCount}`;
+            const flowProgress = `📊 ${completedCount + 1}/${totalCount}`;
             if (nextStep.type === 'media' && nextStep.requiredCount) {
                 const currentMediaCount = (tempData[nextStep.field] || []).length;
                 const mediaProgress = `📸 ${currentMediaCount}/${nextStep.requiredCount} ပုံ ရရှိပြီးပါပြီ`;

@@ -194,9 +194,36 @@ Return strict JSON:
   "shipment_complete": true/false
 }`
 };
-```
+
+# Dynamic Flow Steps Customization
+
+The goal is to allow merchants to fully customize their bot's conversation steps (questions, options, types) from the dashboard, moving away from hardcoded flows in the backend.
+
+## Proposed Changes
+
+### Database Migration
+#### [NEW] [add_steps_to_flows.sql](file:///d:/all%20in%20one/backend/src/scripts/add_steps_to_flows.sql)
+- Add `steps` JSONB column to `automation_flows` table.
+- Populate existing flows with default steps based on their `business_type`.
+
+### Backend Implementation
+#### [MODIFY] [conversationEngine.ts](file:///d:/all%20in%20one/backend/src/services/conversationEngine.ts)
+- Update `runConversationEngine` to check `flow.steps` before falling back to hardcoded defaults.
+- Ensure the engine remains backward-compatible with the old `CONVERSATION_FLOWS` structure.
+
+#### [MODIFY] [seed.services.ts](file:///d:/all%20in%20one/backend/src/services/seed.services.ts)
+- Update default flow seeding to include the new `steps` JSON structure.
+
+### Frontend Implementation
+#### [NEW] [FlowEditor.tsx](file:///d:/all%20in%20one/frontend/components/FlowEditor.tsx)
+- Create a visual editor for conversation steps.
+- Allow adding, removing, and reordering steps.
+- Support setting field names, question text, and options.
 
 ## Verification Plan
+- [ ] Run SQL migration and verify `steps` column exists.
+- [ ] Test bot flow with dynamic steps by modifying a flow's `steps` in Supabase.
+- [ ] Verify that validation and transformation still work as expected for dynamic steps.
 
 ### Database Testing
 1. Run migration to add `business_type` column

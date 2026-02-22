@@ -260,25 +260,19 @@ router.post("/register", async (req, res) => {
         // Use explicit business_type or derive from subscription_plan
         const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'online_shop');
 
-        console.log("🏪 Creating merchant profile for user:", authData.user.id);
-        const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
-            id: authData.user.id,
-            page_id: `pending-${authData.user.id}`, // Unique placeholder to satisfy NOT NULL & UNIQUE
-            business_name: `${name}'s Business`,
-            subscription_plan: subscription_plan || 'online_shop',
-            business_type: businessType, // Save business type
-            trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            subscription_status: 'active'
+        console.log("🏪 Creating merchant profile for user via RPC:", authData.user.id);
+        const { error: merchantError } = await supabaseAdmin.rpc("create_merchant_profile", {
+            p_id: authData.user.id,
+            p_page_id: `pending-${authData.user.id}`,
+            p_business_name: `${name}'s Business`,
+            p_subscription_plan: subscription_plan || 'online_shop',
+            p_business_type: businessType,
+            p_trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         });
 
         if (merchantError) {
-            logger.error("❌ Merchant profile creation FAILED", merchantError, { email });
-            // If it's a unique constraint on ID, maybe the merchant was created by a trigger?
-            if (merchantError.code === '23505') {
-                console.log("♻️ Merchant already exists, skipping insert.");
-            } else {
-                throw new Error(`Failed to create merchant profile: ${merchantError.message}`);
-            }
+            logger.error("❌ Merchant profile creation via RPC FAILED", merchantError, { userId: authData.user.id, email });
+            throw new Error(`Database RLS Error: Failed to create merchant profile via RPC. Error: ${merchantError.message}`);
         }
 
         console.log("✅ Merchant profile created successfully");
