@@ -25,6 +25,7 @@ app.use(cors({
         "https://ashy.vercel.app",
         "https://all-in-one-social-media-management-ashy.vercel.app",
         "https://all-in-one-social-media-management-frontend-eta.vercel.app",
+        "https://oraculum.click",
         process.env.FRONTEND_URL || ""
     ].filter(Boolean),
     credentials: true,
