@@ -656,17 +656,21 @@ export async function runConversationEngine(
 
 // ─── Helper: Save reply message ──────────────────────────────────
 async function saveReplyMessage(conversation: any, flow: any, reply: string) {
-    await supabaseAdmin.from("messages").insert({
-        user_id: flow.merchant_id || conversation.merchant_id,
-        sender_id: flow.merchant_id || conversation.merchant_id,
-        sender_email: "AI-Assistant",
-        sender_name: "Auto-Reply Bot",
-        body: reply,
-        content: reply, // Added for compatibility with updated schema
-        channel: "facebook",
-        status: "replied",
-        created_at: new Date().toISOString(),
-        conversation_id: conversation.id,
-        metadata: { conversation_id: conversation.id },
-    });
+    try {
+        await supabaseAdmin.from("messages").insert({
+            user_id: flow.merchant_id || conversation.merchant_id,
+            sender_id: flow.merchant_id || conversation.merchant_id,
+            sender_email: "AI-Assistant",
+            sender_name: "Auto-Reply Bot",
+            body: reply,
+            // content: reply, 
+            channel: "facebook",
+            status: "replied",
+            created_at: new Date().toISOString(),
+            // conversation_id: conversation.id,
+            metadata: { conversation_id: conversation.id },
+        });
+    } catch (err) {
+        console.warn("⚠️ Failed to save reply message log", err);
+    }
 }

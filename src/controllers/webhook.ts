@@ -21,7 +21,8 @@ export const verifyWebhook = (req: Request, res: Response) => {
 
 export const handleWebhook = async (req: Request, res: Response) => {
     const body = req.body as FacebookWebhookPayload;
-    logger.info("📥 Webhook received", { object: body.object });
+    // VERY NOISY but necessary to see if Tester messages arrive at all
+    console.log("📥 [RAW WEBHOOK]", JSON.stringify(body));
 
     try {
         const entry = body.entry?.[0];
@@ -77,12 +78,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
         }
 
         if (!connection) {
-            console.log("🚫 No connection record for Page ID:", pageId);
+            console.log(`🚫 [DEBUG] No connection record found in 'platform_connections' for Page ID: ${pageId}. Is the page connected?`);
             return res.sendStatus(200);
         }
 
         const merchantId = connection.user_id || connection.merchant_id;
-        console.log("👤 Merchant:", merchantId, "Page Access Token exists:", !!connection.page_access_token);
+        console.log(`👤 [DEBUG] Merchant ID: ${merchantId}, Page Name: ${connection.page_name}`);
+        console.log(`🔑 [DEBUG] Page Access Token exists: ${!!connection.page_access_token}`);
 
         // 1.2️⃣ Admin Keyword Check (Silence Bot)
         const adminKeywords = ["admin", "အက်မင်", "မင်မင်"];
@@ -90,17 +92,21 @@ export const handleWebhook = async (req: Request, res: Response) => {
         if (adminKeywords.some(k => lowerMessage.includes(k))) {
             console.log("👤 Admin requested by user. Silencing bot.");
             // Record message for the dashboard
-            await supabaseAdmin.from("messages").insert({
-                user_id: merchantId,
-                sender_id: senderId,
-                sender_email: senderId,
-                sender_name: "Facebook User",
-                body: messageText,
-                content: messageText,
-                channel: "facebook",
-                status: "received",
-                metadata: { fb_mid: mid }
-            });
+            try {
+                await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: senderId,
+                    sender_email: senderId,
+                    sender_name: "Facebook User",
+                    body: messageText,
+                    // content: messageText, // Temporarily commented out to avoid crash if missing
+                    channel: "facebook",
+                    status: "received",
+                    metadata: { fb_mid: mid }
+                });
+            } catch (err) {
+                console.warn("⚠️ Failed to record admin request message", err);
+            }
             // Send a small confirmation that admin is notified (optional, but good UX)
             await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
             return;
@@ -114,6 +120,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .maybeSingle();
 
         if (merchError) logger.error("❌ Merchant Search Error", merchError, { merchantId });
+
+        if (!merchant) {
+            console.log(`⚠️ [DEBUG] Merchant profile not found for ID: ${merchantId}`);
+        } else {
+            console.log(`📊 [DEBUG] Merchant Status: ${merchant.subscription_status}, Type: ${merchant.business_type}`);
+        }
 
         // 2️⃣ Check for active conversation
         let isResuming = true;
@@ -177,12 +189,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 const autoMatched = flows?.find(f => f.business_type === bType);
                 if (autoMatched) {
                     flow = autoMatched;
-                    console.log("✅ Auto-matched Flow by Type:", flow.name);
+                    console.log("✅ [DEBUG] Auto-matched Flow by Type:", flow.name);
                 } else if (flows && flows.length > 0) {
                     flow = flows[0];
-                    console.log("✅ Fallback to first flow:", flow.name);
+                    console.log("✅ [DEBUG] Fallback to first available flow:", flow.name);
                 } else {
-                    console.log("🚫 No flows available for auto-start.");
+                    console.log(`🚫 [DEBUG] No active flows found for merchant ${merchantId}. Check 'automation_flows' table.`);
                     return;
                 }
             } else {
@@ -251,18 +263,22 @@ export const handleWebhook = async (req: Request, res: Response) => {
             }
 
             // Record trigger message for new conversation (so engine sees it)
-            await supabaseAdmin.from("messages").insert({
-                user_id: merchantId,
-                sender_id: senderId,
-                sender_email: senderId,
-                sender_name: "Facebook User",
-                body: messageText,
-                content: messageText,
-                channel: "facebook",
-                status: "received",
-                conversation_id: conversation.id,
-                metadata: { conversation_id: conversation.id, fb_mid: mid }
-            });
+            try {
+                await supabaseAdmin.from("messages").insert({
+                    user_id: merchantId,
+                    sender_id: senderId,
+                    sender_email: senderId,
+                    sender_name: "Facebook User",
+                    body: messageText,
+                    // content: messageText,
+                    channel: "facebook",
+                    status: "received",
+                    conversation_id: conversation.id,
+                    metadata: { conversation_id: conversation.id, fb_mid: mid }
+                });
+            } catch (msgErr) {
+                console.warn("⚠️ Failed to record trigger message (non-critical)", msgErr);
+            }
 
             // Transition to engine logic immediately for first question
             // We set isResuming to FALSE here so the engine doesn't try to 
@@ -357,19 +373,23 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 .maybeSingle();
 
             if (!recordedMsg) {
-                const { error: msgErr } = await supabaseAdmin.from("messages").insert({
-                    user_id: merchantId,
-                    sender_id: senderId,
-                    sender_email: senderId,
-                    sender_name: "Facebook User",
-                    body: messageText,
-                    content: messageText,
-                    channel: "facebook",
-                    status: "received",
-                    conversation_id: conversation?.id,
-                    metadata: { conversation_id: conversation?.id, fb_mid: mid }
-                });
-                if (msgErr) logger.error("❌ Failed to record linked message", msgErr, { merchantId, conversationId: conversation?.id });
+                try {
+                    const { error: msgErr } = await supabaseAdmin.from("messages").insert({
+                        user_id: merchantId,
+                        sender_id: senderId,
+                        sender_email: senderId,
+                        sender_name: "Facebook User",
+                        body: messageText,
+                        // content: messageText,
+                        channel: "facebook",
+                        status: "received",
+                        // conversation_id: conversation?.id,
+                        metadata: { conversation_id: conversation?.id, fb_mid: mid }
+                    });
+                    if (msgErr) console.warn("⚠️ Failed to record linked message", msgErr);
+                } catch (err) {
+                    console.warn("⚠️ Exception while recording linked message", err);
+                }
             }
         }
 

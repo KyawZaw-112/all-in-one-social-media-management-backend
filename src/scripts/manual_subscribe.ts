@@ -1,10 +1,8 @@
-import dotenv from "dotenv";
-dotenv.config({ path: "./.env" });
+import "../env.js";
 import { subscribePageToWebhook } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 
-async function manualSubscribe() {
-    const pageId = "100530332303174";
+async function manualSubscribe(pageId: string) {
     console.log(`🔍 Attempting to manually subscribe Page: ${pageId}...`);
 
     const { data: connection, error } = await supabaseAdmin
@@ -14,13 +12,22 @@ async function manualSubscribe() {
         .maybeSingle();
 
     if (error || !connection) {
-        console.error("❌ Could not find connection in database.", error);
+        console.error(`❌ Could not find connection for ${pageId} in database.`, error);
         return;
     }
 
     console.log(`✅ Found token for Page: ${connection.page_name}`);
-    await subscribePageToWebhook(pageId, connection.page_access_token);
-    console.log("🚀 Subscription request sent. Check Render logs for 'Subscribe response'");
+    try {
+        await subscribePageToWebhook(pageId, connection.page_access_token);
+        console.log(`🚀 Subscription request for ${connection.page_name} sent SUCCESSFULLY.`);
+    } catch (err) {
+        console.error(`❌ Subscription for ${connection.page_name} FAILED:`, err);
+    }
 }
 
-manualSubscribe().catch(console.error);
+async function run() {
+    await manualSubscribe("100530332303174"); // Kay
+    await manualSubscribe("957808180755824"); // Bluh bluh
+}
+
+run().catch(console.error);
