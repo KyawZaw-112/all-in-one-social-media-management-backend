@@ -577,6 +577,7 @@ export async function runConversationEngine(
                             tempData.item_image = match.image_url;
                             tempData.item_desc = match.description;
                             tempData.item_variants = match.variants;
+                            tempData._stock = match.stock;
                         } else {
                             // Clear previous if any
                             delete tempData.item_id;
@@ -585,8 +586,31 @@ export async function runConversationEngine(
                             delete tempData.item_image;
                             delete tempData.item_desc;
                             delete tempData.item_variants;
+                            delete tempData._stock;
                         }
                         return v;
+                    }
+                };
+            }
+
+            // Stock-aware quantity validation
+            if (step.field === 'quantity' && tempData._stock != null) {
+                const availableStock = tempData._stock;
+                return {
+                    ...step,
+                    question: `အရေအတွက် မည်မျှ လိုချင်လဲ? 🔢\n\n📦 Stock ကျန်: ${availableStock} ခု`,
+                    validation: (v: string) => {
+                        const n = parseInt(v);
+                        return !isNaN(n) && n > 0;
+                    },
+                    transform: (v: string) => {
+                        const n = parseInt(v);
+                        if (n > availableStock) {
+                            tempData._qty_exceeds_stock = true;
+                            return n;
+                        }
+                        delete tempData._qty_exceeds_stock;
+                        return n;
                     }
                 };
             }
@@ -771,6 +795,28 @@ export async function runConversationEngine(
 
             tempData[currentStep.field] = transformedValue;
 
+            // Stock validation: reject quantity exceeding stock
+            if (currentStep.field === 'quantity' && tempData._qty_exceeds_stock) {
+                const stock = tempData._stock || 0;
+                delete tempData.quantity;
+                delete tempData._qty_exceeds_stock;
+
+                const stockErrorReply =
+                    `❌ Stock မလုံလောက်ပါ!\n\n` +
+                    `📦 လက်ကျန် Stock: ${stock} ခု\n` +
+                    `သင်တောင်းဆိုသော အရေအတွက်: ${transformedValue} ခု\n\n` +
+                    `${stock} ခု သို့မဟုတ် ထို့အောက် ပြန်ရိုက်ပေးပါ 🔢`;
+
+                await saveReplyMessage(conversation, flow, stockErrorReply);
+
+                return {
+                    reply: stockErrorReply,
+                    temp_data: tempData,
+                    order_complete: false,
+                    business_type: businessType,
+                };
+            }
+
             // Handle branching for confirmation "No"
             if (currentStep.field === 'confirmation' && transformedValue === 'No') {
                 delete tempData.item_name;
@@ -808,6 +854,7 @@ export async function runConversationEngine(
                             tempData.item_image = match.image_url;
                             tempData.item_desc = match.description;
                             tempData.item_variants = match.variants;
+                            tempData._stock = match.stock;
                         } else {
                             delete tempData.item_id;
                             delete tempData.product_name;
@@ -815,8 +862,31 @@ export async function runConversationEngine(
                             delete tempData.item_image;
                             delete tempData.item_desc;
                             delete tempData.item_variants;
+                            delete tempData._stock;
                         }
                         return v;
+                    }
+                };
+            }
+
+            // Stock-aware quantity validation (second pass)
+            if (step.field === 'quantity' && tempData._stock != null) {
+                const availableStock = tempData._stock;
+                return {
+                    ...step,
+                    question: `အရေအတွက် မည်မျှ လိုချင်လဲ? 🔢\n\n📦 Stock ကျန်: ${availableStock} ခု`,
+                    validation: (v: string) => {
+                        const n = parseInt(v);
+                        return !isNaN(n) && n > 0;
+                    },
+                    transform: (v: string) => {
+                        const n = parseInt(v);
+                        if (n > availableStock) {
+                            tempData._qty_exceeds_stock = true;
+                            return n;
+                        }
+                        delete tempData._qty_exceeds_stock;
+                        return n;
                     }
                 };
             }
