@@ -270,21 +270,44 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     if (cleanData.payment && !cleanData.payment_method) cleanData.payment_method = cleanData.payment;
 
                     if (businessType === 'cargo') {
-                        await supabaseAdmin.from("shipments").insert({
+                        const shipmentData: any = {
                             merchant_id: merchantId,
                             conversation_id: conversation.id,
                             page_id: pageId,
                             order_no: result.temp_data.order_no,
-                            ...cleanData,
+                            country: cleanData.country,
+                            shipping: cleanData.shipping,
+                            item_type: cleanData.item_type,
+                            item_name: cleanData.item_name,
+                            item_value: cleanData.item_value,
+                            weight: cleanData.weight,
+                            full_name: cleanData.full_name,
+                            phone: cleanData.phone,
+                            address: cleanData.address,
+                            item_photos: cleanData.item_photos,
+                            notes: cleanData.notes,
                             status: "pending",
-                        });
+                        };
+                        const { error: shipInsertErr } = await supabaseAdmin.from("shipments").insert(shipmentData);
+                        if (shipInsertErr) logger.error("❌ Failed to insert shipment", shipInsertErr);
                     } else {
                         const orderData: any = {
                             merchant_id: merchantId,
                             conversation_id: conversation.id,
                             page_id: pageId,
                             order_no: result.temp_data.order_no,
-                            ...cleanData,
+                            item_name: cleanData.product_name || cleanData.item_name,
+                            quantity: cleanData.quantity,
+                            full_name: cleanData.full_name,
+                            phone: cleanData.phone,
+                            address: cleanData.address,
+                            payment_method: cleanData.payment_method || cleanData.payment,
+                            payment: cleanData.payment,
+                            order_source: cleanData.order_source,
+                            delivery: cleanData.delivery,
+                            notes: cleanData.notes,
+                            total_amount: cleanData.total_amount,
+                            item_photos: cleanData.item_photos,
                             status: "pending",
                         };
 
@@ -294,9 +317,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             if (cleanData.color) parts.push(`Color: ${cleanData.color}`);
                             orderData.item_variant = parts.join(', ');
                         }
-                        if (cleanData.product_name) orderData.item_name = cleanData.product_name;
 
-                        await supabaseAdmin.from("orders").insert(orderData);
+                        const { error: orderInsertErr } = await supabaseAdmin.from("orders").insert(orderData);
+                        if (orderInsertErr) logger.error("❌ Failed to insert order", orderInsertErr);
                     }
                     await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
                 }
