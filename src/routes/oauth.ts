@@ -36,8 +36,9 @@ router.get("/", requireAuth, async (req, res) => {
  * STEP 1: Redirect user to Facebook OAuth
  * GET /api/oauth/facebook
  */
-router.get("/facebook", async (req, res) => {
-    const userId = req.query.userId as string; // frontend ကပို့မယ်
+// Updated to requireAuth for security — prevents anyone from starting a flow for another userId
+router.get("/facebook", requireAuth, async (req: any, res) => {
+    const userId = req.user.id; // Get from authenticated session, not query param
 
     const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID!,
@@ -140,14 +141,12 @@ router.get("/facebook/callback", async (req, res) => {
 
         // 🔥 FIX: Liberate page_id from any other merchant record to avoid unique constraint violation
         console.log(`🔓 Liberating page_id ${page.id} from other records...`);
-        // 1. Liberate in merchants
         await supabaseAdmin
             .from("merchants")
             .update({ page_id: `liberated-${Date.now()}-${page.id}` })
             .eq("page_id", page.id)
             .neq("id", userId);
 
-        // 2. Liberate in platform_connections (by deleting old connections for this page)
         await supabaseAdmin
             .from("platform_connections")
             .delete()
@@ -156,22 +155,17 @@ router.get("/facebook/callback", async (req, res) => {
 
         if (!existingMerchant) {
             console.log("⚠️ Creating missing merchant record during FB callback for user:", userId);
+            // Default to online_shop ONLY if record is missing entirely
             const { error: merchError } = await supabaseAdmin.from("merchants").insert({
                 id: userId,
                 page_id: page.id,
                 business_name: page.name,
-                business_type: "online_shop", // Default if record is missing entirely
+                business_type: "online_shop",
                 subscription_plan: "online_shop",
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
-            if (merchError) {
-                console.error("❌ Failed to create missing merchant:", merchError);
-                throw merchError;
-            }
-
-            // 🔥 Seed default flows for auto-created merchant
-            await seedDefaultFlows(userId, "online_shop");
+            if (merchError) throw merchError;
         } else {
             console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
@@ -190,17 +184,12 @@ router.get("/facebook/callback", async (req, res) => {
                 { onConflict: "user_id,page_id" }
             );
 
-        if (insertError) {
-            logger.error("Insert error in platform_connections", insertError, { userId, pageId: page.id });
-            if (insertError.message.includes("row-level security policy")) {
-                throw new Error("Database Access Error: RLS violation. Please handle this in Supabase.");
-            }
-            throw insertError;
-        }
+        if (insertError) throw insertError;
 
         // Update Merchant Profile with Page Info
+        // CRITICAL: We DO NOT update business_type here to avoid resetting it.
         console.log(`📝 Updating merchant ${userId} with page_id: ${page.id}`);
-        const { error: updateError } = await supabaseAdmin
+        await supabaseAdmin
             .from("merchants")
             .update({
                 page_id: page.id,
@@ -208,13 +197,15 @@ router.get("/facebook/callback", async (req, res) => {
             })
             .eq("id", userId);
 
-        if (updateError) {
-            console.error("❌ Failed to update merchant page_id:", updateError);
-            throw updateError;
-        }
+        // 🔥 Idempotent seeding: Only seed if the merchant HAS NO FLOWS
+        // We fetch the latest type to be safe
+        const { data: finalMerchant } = await supabaseAdmin
+            .from("merchants")
+            .select("business_type")
+            .eq("id", userId)
+            .maybeSingle();
 
-        // 🔥 Fallback seeding (idempotent): Ensure they have at least one flow
-        const bType = existingMerchant?.business_type || "online_shop";
+        const bType = finalMerchant?.business_type || "online_shop";
         await seedDefaultFlows(userId, bType);
 
         // Subscribe Webhook

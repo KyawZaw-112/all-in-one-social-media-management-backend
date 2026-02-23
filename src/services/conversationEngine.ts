@@ -58,14 +58,34 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
         },
         {
             field: "item_name",
-            question:
-                "ဝယ်ချင်သည့် ပစ္စည်းအမည် ရေးပေးပါ ✏️\n\n",
+            question: "ဝယ်ချင်သည့် ပစ္စည်းအမည် ရေးပေးပါ ✏️",
             validation: (v) => v.trim().length > 0,
         },
         {
-            field: "item_variant",
-            question:
-                "အရောင်နဲ့ အရွယ်အစား ရွေးပေးပါ 🎨",
+            field: "confirmation",
+            question: "ပစ္စည်း အတည်ပြုပေးပါ ✅",
+            options: [
+                { label: "ဝယ်မည်", value: "Yes" },
+                { label: "မှားနေသည် (ပြန်ရိုက်မည်)", value: "No" },
+            ],
+            validation: (v) => {
+                const n = parseInt(v);
+                return (n >= 1 && n <= 2) || ["yes", "no", "ဝယ်", "မှား"].some(k => v.toLowerCase().includes(k));
+            },
+            transform: (v) => {
+                const n = parseInt(v);
+                if (n === 1 || v.toLowerCase().includes("yes") || v.includes("ဝယ်")) return "Yes";
+                return "No";
+            }
+        },
+        {
+            field: "size",
+            question: "အရွယ်အစား (Size) ရွေးပေးပါ 📏",
+            validation: (v) => v.trim().length > 0,
+        },
+        {
+            field: "color",
+            question: "အရောင် (Color) ရွေးပေးပါ 🎨",
             validation: (v) => v.trim().length > 0,
         },
         {
@@ -154,9 +174,11 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             `📺 မှာယူမှုနည်း : \n` +
             `${d.order_source || "-"}\n` +
             `📝 ပစ္စည်း : \n` +
-            `${d.item_name || "-"}\n` +
-            `🎨 အရောင်/Size  : \n` +
-            `${d.item_variant || "-"}\n` +
+            `${d.product_name || d.item_name || "-"}\n` +
+            `📏 Size       : \n` +
+            `${d.size || "-"}\n` +
+            `🎨 Color      : \n` +
+            `${d.color || "-"}\n` +
             `🔢 အရေအတွက်   : \n` +
             `${d.quantity || "-"}\n` +
             priceMsg +
@@ -432,17 +454,13 @@ export function getWelcomeMessage(businessType: string, senderName?: string, pag
         return (
             `${greeting}\n` +
             `${shop}\n\n` +
-            "✅ တရုတ် → မြန်မာ\n" +
-            "✅ ထိုင်း → မြန်မာ\n" +
-            "✅ ဂျပန် → မြန်မာ\n\n" +
-            "Cargo အသစ် ပို့ရန် စတင်ပါမည် 📦"
+            `Cargo အသစ် ပို့ရန် "order"လို့ ရိုက်ပို့ပြီး စတင်ပါမည် 📦`
         );
     }
     return (
         `${greeting}\n` +
         `${shop}\n\n` +
-        "🛍️ Live Sale မှာ ဝယ်ယူသည့်အတွက်\n" +
-        "ကျေးဇူးတင်ပါသည် 💖\n\n" +
+        "🛍️ ဝယ်ယူသည့်အတွက် ကျေးဇူးတင်ပါသည် 💖\n\n" +
         "Order စတင်ပါမည်..."
     );
 }
@@ -453,7 +471,7 @@ export function getDefaultReply(): string {
         "ဝမ်းနည်းပါတယ်၊ သင့် Message ကို\n" +
         "နားမလည်ပါ 😅\n\n" +
         "ကျေးဇူးပြုပြီး trigger keyword\n" +
-        "(ဥပမာ: order, buy, cargo)\n" +
+        "(ဥပမာ: order, cargo)\n" +
         "ဖြင့် စတင်ပေးပါ 🙏"
     );
 }
@@ -540,33 +558,64 @@ export async function runConversationEngine(
             const override = metadata.steps?.[step.field];
 
             // Online Shop Product Logic
-            if (step.field === 'item_name' && products.length > 0) {
-                const productList = products.map((p, i) => `${i + 1}️⃣ ${p.name} — ${p.price.toLocaleString()} ${p.currency}`).join('\n');
+            if (step.field === 'item_name') {
                 return {
                     ...step,
-                    question: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n\n${productList}\n\n(နံပါတ် ရိုက်ပေးပါ)`,
-                    validation: (v: string) => {
-                        const n = parseInt(v);
-                        return n >= 1 && n <= products.length;
-                    },
                     transform: (v: string) => {
-                        const n = parseInt(v);
-                        const p = products[n - 1];
-                        // Store price and currency for later
-                        tempData.item_id = p.id;
-                        tempData.item_price = p.price;
-                        tempData.currency = p.currency;
-                        return p.name;
+                        const lowerV = v.toLowerCase().trim();
+                        // Try to find a match
+                        const match = products.find(p =>
+                            p.name.toLowerCase().includes(lowerV) ||
+                            lowerV.includes(p.name.toLowerCase())
+                        );
+
+                        if (match) {
+                            tempData.item_id = match.id;
+                            tempData.product_name = match.name;
+                            tempData.item_price = match.price;
+                            tempData.currency = match.currency;
+                            tempData.item_image = match.image_url;
+                            tempData.item_desc = match.description;
+                            tempData.item_variants = match.variants;
+                        } else {
+                            // Clear previous if any
+                            delete tempData.item_id;
+                            delete tempData.product_name;
+                            delete tempData.item_price;
+                            delete tempData.item_image;
+                            delete tempData.item_desc;
+                            delete tempData.item_variants;
+                        }
+                        return v;
                     }
                 };
             }
 
-            if (step.field === 'item_variant' && products.length > 0 && tempData.item_id) {
-                const selectedProduct = products.find(p => p.id === tempData.item_id);
-                if (selectedProduct && selectedProduct.variants) {
+            if (step.field === 'confirmation') {
+                if (tempData.item_id) {
+                    const price = (tempData.item_price || 0).toLocaleString();
+                    const currency = tempData.currency || 'MMK';
+                    const desc = tempData.item_desc ? `\n📝 ${tempData.item_desc}` : '';
+                    const image = tempData.item_image ? `\n🖼️ [Product Image]` : '';
+
                     return {
                         ...step,
-                        question: `အရောင်နဲ့ အရွယ်အစား ရွေးပေးပါ 🎨\n\n(ဥပမာ - ${selectedProduct.variants})`
+                        question: `ဒီပစ္စည်းကို ဆိုလိုတာပါသလား? ✅\n\n📌 ${tempData.product_name}\n💰 ဈေးနှုန်း: ${price} ${currency}${desc}${image}\n\n(1) ဝယ်မည်\n(2) မှားနေသည် (ပြန်ရိုက်မည်)`
+                    };
+                } else {
+                    // If no product found, we can skip confirmation or show a "Manual Entry" confirmation
+                    return {
+                        ...step,
+                        question: `ပစ္စည်းအမည် "${tempData.item_name}" အမှန်ပဲလား? ✅\n\n(1) အမှန်\n(2) မှားနေသည် (ပြန်ရိုက်မည်)`
+                    };
+                }
+            }
+
+            if (step.field === 'size' || step.field === 'color') {
+                if (tempData.item_id && tempData.item_variants) {
+                    return {
+                        ...step,
+                        question: `${step.question}\n\n(သတ်မှတ်ထားသော variants: ${tempData.item_variants})`
                     };
                 }
             }
@@ -574,7 +623,7 @@ export async function runConversationEngine(
             // Cargo Rates Logic
             if (businessType === 'cargo' && rates.length > 0) {
                 if (step.field === 'country') {
-                    const countries = Array.from(new Set(rates.map(r => r.country)));
+                    const countries = Array.from(new Set(rates.map(r => r.country))).sort();
                     const countryList = countries.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n');
                     return {
                         ...step,
@@ -594,7 +643,7 @@ export async function runConversationEngine(
 
                 if (step.field === 'shipping' && tempData.country) {
                     const countryRates = rates.filter(r => r.country === tempData.country);
-                    const types = Array.from(new Set(countryRates.map(r => r.shipping_type)));
+                    const types = Array.from(new Set(countryRates.map(r => r.shipping_type))).sort();
                     const typeList = types.map((t, i) => `${i + 1}️⃣ ${t}`).join('\n');
                     return {
                         ...step,
@@ -721,6 +770,15 @@ export async function runConversationEngine(
                 : messageText;
 
             tempData[currentStep.field] = transformedValue;
+
+            // Handle branching for confirmation "No"
+            if (currentStep.field === 'confirmation' && transformedValue === 'No') {
+                delete tempData.item_name;
+                delete tempData.product_name;
+                delete tempData.item_id;
+                delete tempData.confirmation;
+                // We'll let the next step selection logic pick item_name again
+            }
         }
     }
 
