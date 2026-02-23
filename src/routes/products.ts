@@ -5,6 +5,44 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 const router = Router();
 
 /**
+ * Helper to handle Base64 image upload to Supabase
+ */
+async function handleImageUpload(imageBase64: string, userId: string) {
+    if (!imageBase64.startsWith('data:image/')) {
+        throw new Error("Invalid image format");
+    }
+
+    // Extract content type and base64 data
+    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+        throw new Error("Invalid base64 string");
+    }
+
+    const contentType = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+
+    // Generate unique filename
+    const fileExt = contentType.split('/')[1] || 'png';
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `${userId}/${fileName}`;
+
+    const { data, error } = await supabaseAdmin.storage
+        .from('product-images')
+        .upload(filePath, buffer, {
+            contentType,
+            upsert: true
+        });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabaseAdmin.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+    return publicUrl;
+}
+
+/**
  * GET /api/products — List all products for merchant
  */
 router.get("/", requireAuth, async (req: any, res) => {
@@ -57,9 +95,6 @@ router.get("/low-stock", requireAuth, async (req: any, res) => {
     }
 });
 
-/**
- * POST /api/products — Create product
- */
 router.post("/", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
@@ -67,6 +102,17 @@ router.post("/", requireAuth, async (req: any, res) => {
 
         if (!name) {
             return res.status(400).json({ error: "Product name is required" });
+        }
+
+        let finalImageUrl = image_url || "";
+
+        // Handle Base64 Upload
+        if (req.body.image_base64) {
+            try {
+                finalImageUrl = await handleImageUpload(req.body.image_base64, userId);
+            } catch (err: any) {
+                return res.status(400).json({ error: "Image upload failed: " + err.message });
+            }
         }
 
         const { data, error } = await supabaseAdmin
@@ -78,7 +124,7 @@ router.post("/", requireAuth, async (req: any, res) => {
                 price: price || 0,
                 currency: currency || "MMK",
                 variants: variants || "",
-                image_url: image_url || "",
+                image_url: finalImageUrl,
                 stock: stock || 0,
                 low_stock_threshold: low_stock_threshold || 5,
             })
@@ -105,6 +151,16 @@ router.patch("/:id", requireAuth, async (req: any, res) => {
         delete updates.id;
         delete updates.merchant_id;
         delete updates.created_at;
+        const imageBase64 = updates.image_base64;
+        delete updates.image_base64;
+
+        if (imageBase64) {
+            try {
+                updates.image_url = await handleImageUpload(imageBase64, userId);
+            } catch (err: any) {
+                return res.status(400).json({ error: "Image upload failed: " + err.message });
+            }
+        }
 
         const { data, error } = await supabaseAdmin
             .from("products")
