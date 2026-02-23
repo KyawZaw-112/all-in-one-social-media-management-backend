@@ -60,7 +60,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 const attachments = messaging?.message?.attachments || [];
                 const mid = messaging?.message?.mid;
 
-                console.log(`📝 [PAGE: ${pageId}] Processing Message from ${senderId}:`, messageText?.substring(0, 20));
+                console.log(`📝 [PAGE: ${pageId}] [SENDER: ${senderId}] Processing Message:`, {
+                    text: messageText?.substring(0, 50),
+                    attachments: attachments.map((a: any) => a.type),
+                    mid
+                });
 
                 if (!pageId || !senderId || (!messageText && attachments.length === 0)) {
                     console.log("⚠️ Missing required message data, skipping context.");

@@ -15,23 +15,33 @@ export function getFacebookAuthUrl(userId: string) {
 }
 
 export async function sendImageMessage(pageId: string, pageAccessToken: string, recipientId: string, imageUrl: string) {
-    await axios.post(`https://graph.facebook.com/v19.0/me/messages`,
-        {
-            recipient: { id: recipientId },
-            message: {
-                attachment: {
-                    type: "image",
-                    payload: {
-                        url: imageUrl,
-                        is_reusable: true
+    try {
+        await axios.post(`https://graph.facebook.com/v19.0/me/messages`,
+            {
+                recipient: { id: recipientId },
+                message: {
+                    attachment: {
+                        type: "image",
+                        payload: {
+                            url: imageUrl,
+                            is_reusable: true
+                        }
                     }
                 }
+            },
+            {
+                params: { access_token: pageAccessToken }
             }
-        },
-        {
-            params: { access_token: pageAccessToken }
-        }
-    )
+        )
+    } catch (error: any) {
+        const fbError = error.response?.data?.error || error.message;
+        console.error("❌ Facebook Send Image Failed:", {
+            recipientId,
+            imageUrl,
+            error: fbError,
+            status: error.response?.status
+        });
+    }
 }
 
 export async function exchangeCodeForToken(code: string) {
@@ -105,13 +115,13 @@ export async function sendMessage(
     );
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: any = await response.json().catch(() => ({}));
         console.error("❌ Facebook Send Message Failed:", {
             status: response.status,
             statusText: response.statusText,
-            error: errorData
+            fb_error: errorData.error || errorData
         });
-        throw new Error(`Facebook API Error: ${response.status} ${response.statusText}`);
+        throw new Error(`Facebook API Error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData.error || errorData)}`);
     }
 }
 
@@ -124,8 +134,13 @@ export async function getUserProfile(psid: string, pageToken: string) {
             }
         });
         return data;
-    } catch (error) {
-        console.error("⚠️ Failed to fetch user profile:", error);
+    } catch (error: any) {
+        const fbError = error.response?.data?.error || error.message;
+        console.error("⚠️ Failed to fetch user profile:", {
+            psid,
+            error: fbError,
+            status: error.response?.status
+        });
         return null;
     }
 }
