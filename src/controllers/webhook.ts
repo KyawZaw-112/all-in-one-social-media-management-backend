@@ -1,4 +1,4 @@
-import { sendMessage, getUserProfile } from "../services/facebook.services.js";
+import { sendMessage, sendImageMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response } from "express";
 import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../services/conversationEngine.js";
@@ -302,6 +302,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 }
 
                 // 7️⃣ Send Reply
+                if (result.image_url) {
+                    await sendImageMessage(pageId, connection.page_access_token, senderId, result.image_url);
+                }
                 await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
 
             } catch (innerError) {
