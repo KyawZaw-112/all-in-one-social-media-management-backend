@@ -65,13 +65,13 @@ export async function subscribePageToWebhook(
     pageAccessToken: string
 ) {
     const response = await fetch(
-        `https://graph.facebook.com/v19.0/${pageId}/subscribed_apps`,
+        `https://graph.facebook.com/v21.0/${pageId}/subscribed_apps`,
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 access_token: pageAccessToken,
-                subscribed_fields: ["messages", "messaging_postbacks"], // 👈 REQUIRED
+                subscribed_fields: ["messages", "messaging_postbacks", "messaging_optins", "message_deliveries", "message_reads"],
             }),
         }
     );

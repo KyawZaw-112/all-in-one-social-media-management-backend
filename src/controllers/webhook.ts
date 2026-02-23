@@ -32,7 +32,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
             body: JSON.stringify(body),
             channel: "facebook",
             status: "received",
-            metadata: { type: "raw_log", entry_count: body.entry?.length }
+            metadata: {
+                type: "raw_log",
+                entry_count: body.entry?.length,
+                page_id: body.entry?.[0]?.id // 🔥 Add first page ID for easy filtering
+            }
         });
     } catch (e) {
         console.error("Failed to log raw webhook:", e);
@@ -56,7 +60,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 }
 
                 const senderId = messaging?.sender?.id;
-                const messageText = messaging?.message?.text || "";
+                let messageText = messaging?.message?.text || "";
+
+                // 🔥 Handle Postbacks (like Get Started button)
+                if (!messageText && messaging?.postback?.payload) {
+                    messageText = messaging.postback.payload;
+                    console.log(`🔘 Postback detected: ${messageText}`);
+                }
+
                 const attachments = messaging?.message?.attachments || [];
                 const mid = messaging?.message?.mid;
 
