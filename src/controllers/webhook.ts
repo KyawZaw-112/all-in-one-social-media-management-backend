@@ -5,6 +5,20 @@ import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../se
 import { FacebookWebhookPayload } from "../types/facebook.js";
 import logger from "../utils/logger.js";
 
+/**
+ * 🛡️ Helper to log messages to the DB without crashing the flow if DB fails (e.g. FK violation)
+ */
+async function safeLogMessage(data: any) {
+    try {
+        const { error } = await supabaseAdmin.from("messages").insert(data);
+        if (error) {
+            console.warn("⚠️ Database log partially failed:", error.message);
+        }
+    } catch (e: any) {
+        console.warn("⚠️ Critical log failure (skipped):", e.message);
+    }
+}
+
 export const verifyWebhook = (req: Request, res: Response) => {
     const VERIFY_TOKEN = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN;
 
@@ -23,24 +37,20 @@ export const handleWebhook = async (req: Request, res: Response) => {
     const body = req.body as FacebookWebhookPayload;
     console.log("📥 [RAW WEBHOOK]", JSON.stringify(body));
 
-    // 🔬 DEBUG: Log raw webhook to DB (using try/catch to ensure we always proceed)
-    try {
-        await supabaseAdmin.from("messages").insert({
-            user_id: "00000000-0000-0000-0000-000000000000",
-            sender_id: "SYSTEM_DEBUG",
-            sender_name: "RAW_WEBHOOK_LOGGER",
-            body: JSON.stringify(body),
-            channel: "facebook",
-            status: "received",
-            metadata: {
-                type: "raw_log",
-                entry_count: body.entry?.length,
-                page_id: body.entry?.[0]?.id // 🔥 Add first page ID for easy filtering
-            }
-        });
-    } catch (e) {
-        console.error("Failed to log raw webhook:", e);
-    }
+    // 🔬 DEBUG: Log raw webhook to DB (using fail-safe helper)
+    await safeLogMessage({
+        user_id: "00000000-0000-0000-0000-000000000000",
+        sender_id: "SYSTEM_DEBUG",
+        sender_name: "RAW_WEBHOOK_LOGGER",
+        body: JSON.stringify(body),
+        channel: "facebook",
+        status: "received",
+        metadata: {
+            type: "raw_log",
+            entry_count: body.entry?.length,
+            page_id: body.entry?.[0]?.id // 🔥 Add first page ID for easy filtering
+        }
+    });
 
     // 0️⃣ EARLY RESPONSE
     // Send 200 OK immediately to satisfy Facebook and prevent retries while we process in background
@@ -103,8 +113,10 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     .eq("page_id", pageId)
                     .maybeSingle();
 
+                console.log(`🔍 [DEBUG] Searching for Page ID: ${pageId} | Found: ${!!connection}`);
+
                 if (connError || !connection) {
-                    console.log(`🚫 [DEBUG] No connection found for Page ID: ${pageId}. Skipping.`);
+                    console.log(`🚫 [DEBUG] No connection found for Page ID: ${pageId}. Error: ${connError?.message || 'none'}. Skipping.`);
                     continue;
                 }
 
@@ -114,7 +126,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 const adminKeywords = ["admin", "အက်မင်", "မင်မင်"];
                 if (messageText && adminKeywords.some(k => messageText.toLowerCase().includes(k))) {
                     console.log(`👤 Admin requested on Page ${pageId}. Silencing bot.`);
-                    await supabaseAdmin.from("messages").insert({
+                    await safeLogMessage({
                         user_id: merchantId,
                         sender_id: senderId,
                         sender_email: senderId,
@@ -216,7 +228,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata);
                     try {
                         await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
-                        await supabaseAdmin.from("messages").insert({
+                        await safeLogMessage({
                             user_id: merchantId,
                             sender_id: merchantId,
                             sender_email: "AI-Assistant",
@@ -226,9 +238,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             status: "replied",
                             metadata: { conversation_id: conversation.id }
                         });
-                    } catch (err) { }
+                    } catch (err) {
+                        console.error("❌ Failed to send welcome:", err);
+                    }
 
-                    await supabaseAdmin.from("messages").insert({
+                    await safeLogMessage({
                         user_id: merchantId,
                         sender_id: senderId,
                         sender_email: senderId,
@@ -257,18 +271,16 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         continue;
                     }
 
-                    try {
-                        await supabaseAdmin.from("messages").insert({
-                            user_id: merchantId,
-                            sender_id: senderId,
-                            sender_email: senderId,
-                            sender_name: "Facebook User",
-                            body: messageText,
-                            channel: "facebook",
-                            status: "received",
-                            metadata: { conversation_id: conversation.id, fb_mid: mid }
-                        });
-                    } catch (ignore) { }
+                    await safeLogMessage({
+                        user_id: merchantId,
+                        sender_id: senderId,
+                        sender_email: senderId,
+                        sender_name: "Facebook User",
+                        body: messageText,
+                        channel: "facebook",
+                        status: "received",
+                        metadata: { conversation_id: conversation.id, fb_mid: mid }
+                    });
                 }
 
                 // 5️⃣ Run conversation engine
@@ -341,9 +353,28 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
                 // 7️⃣ Send Reply
                 if (result.image_url) {
-                    await sendImageMessage(pageId, connection.page_access_token, senderId, result.image_url);
+                    try {
+                        await sendImageMessage(pageId, connection.page_access_token, senderId, result.image_url);
+                    } catch (e) {
+                        console.error("❌ Image send failed:", e);
+                    }
                 }
-                await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+
+                try {
+                    await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+                    await safeLogMessage({
+                        user_id: merchantId,
+                        sender_id: merchantId,
+                        sender_email: "AI-Assistant",
+                        sender_name: "Auto-Reply Bot",
+                        body: result.reply,
+                        channel: "facebook",
+                        status: "replied",
+                        metadata: { conversation_id: conversation.id }
+                    });
+                } catch (sendErr) {
+                    console.error("❌ Final sendMessage failed:", sendErr);
+                }
 
             } catch (innerError) {
                 console.error("🔴 Error processing messaging event:", innerError);
