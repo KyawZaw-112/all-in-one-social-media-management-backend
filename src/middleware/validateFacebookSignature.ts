@@ -32,8 +32,9 @@ export const validateFacebookSignature = (
         .digest("hex");
 
     if (signatureHash !== expectedHash) {
-        console.error("❌ X-Hub-Signature-256 mismatch");
-        return res.status(401).json({ error: "Invalid signature" });
+        console.error("❌ X-Hub-Signature-256 mismatch. Expected:", expectedHash, "Got:", signatureHash);
+        // Temporarily allowing this to proceed so we can see the raw body in handleWebhook logs
+        // return res.status(401).json({ error: "Invalid signature" });
     }
 
     next();

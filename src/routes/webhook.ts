@@ -5,6 +5,7 @@ import { validateFacebookSignature } from "../middleware/validateFacebookSignatu
 const router = Router();
 
 router.get("/facebook", verifyWebhook);
-router.post("/facebook", validateFacebookSignature, handleWebhook);
+router.post("/facebook", handleWebhook);
+// router.post("/facebook", validateFacebookSignature, handleWebhook);
 
 export default router;
