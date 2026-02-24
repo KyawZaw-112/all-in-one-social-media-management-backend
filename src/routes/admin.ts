@@ -89,6 +89,68 @@ router.get("/system-stats", async (req, res) => {
             });
         }
 
+        // 6. Recent Activity Feed
+        const [
+            { data: recentMerchants },
+            { data: recentPayments },
+            { data: recentConnections },
+            { data: expiringTrials }
+        ] = await Promise.all([
+            supabaseAdmin.from("merchants").select("id, business_name, subscription_plan, created_at").order("created_at", { ascending: false }).limit(5),
+            supabaseAdmin.from("payments").select("id, amount, plan, approved_at").eq("status", "approved").order("approved_at", { ascending: false }).limit(5),
+            supabaseAdmin.from("platform_connections").select("id, page_name, created_at").order("created_at", { ascending: false }).limit(5),
+            supabaseAdmin.from("merchants").select("id, business_name, trial_ends_at").eq("subscription_status", "active").gt("trial_ends_at", new Date().toISOString()).lt("trial_ends_at", new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()).limit(5)
+        ]);
+
+        const systemActivity: any[] = [];
+
+        recentMerchants?.forEach(m => {
+            systemActivity.push({
+                type: 'signup',
+                title: 'New Sign Up',
+                desc: `${m.business_name || 'A merchant'} joined ${m.subscription_plan || 'free'} plan`,
+                time: m.created_at,
+                icon: 'user',
+                color: '#1890ff'
+            });
+        });
+
+        recentPayments?.forEach(p => {
+            systemActivity.push({
+                type: 'payment',
+                title: 'Payment Received',
+                desc: `${p.plan || 'Plan'} (${p.amount} Ks)`,
+                time: p.approved_at || new Date().toISOString(),
+                icon: 'wallet',
+                color: '#52c41a'
+            });
+        });
+
+        recentConnections?.forEach(c => {
+            systemActivity.push({
+                type: 'connection',
+                title: 'New Page Connected',
+                desc: `${c.page_name || 'Facebook Page'}`,
+                time: c.created_at,
+                icon: 'global',
+                color: '#722ed1'
+            });
+        });
+
+        expiringTrials?.forEach(m => {
+            systemActivity.push({
+                type: 'trial_ending',
+                title: 'Trial Ending',
+                desc: `${m.business_name}'s trial expires soon`,
+                time: m.trial_ends_at,
+                icon: 'clock',
+                color: '#faad14'
+            });
+        });
+
+        // Sort combined activity by time DESC
+        systemActivity.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
         // Calculate Stats
         const stats = {
             totalUsers: merchants.length,
@@ -104,7 +166,8 @@ router.get("/system-stats", async (req, res) => {
                 fbPages: totalPages || 0,
                 messagesProcessed: totalMessages || 0,
             },
-            chartData: chartData
+            chartData: chartData,
+            systemActivity: systemActivity.slice(0, 10)
         };
 
         res.json({ success: true, data: stats });
