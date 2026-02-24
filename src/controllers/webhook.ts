@@ -38,8 +38,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
     console.log("📥 [RAW WEBHOOK]", JSON.stringify(body));
 
     // 🔬 DEBUG: Log raw webhook to DB (using fail-safe helper)
+    // We omit user_id here to avoid FK violations (it's nullable)
     await safeLogMessage({
-        user_id: "00000000-0000-0000-0000-000000000000",
         sender_id: "SYSTEM_DEBUG",
         sender_name: "RAW_WEBHOOK_LOGGER",
         body: JSON.stringify(body),
@@ -48,7 +48,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
         metadata: {
             type: "raw_log",
             entry_count: body.entry?.length,
-            page_id: body.entry?.[0]?.id // 🔥 Add first page ID for easy filtering
+            page_id: body.entry?.[0]?.id
         }
     });
 
@@ -134,7 +134,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         body: messageText,
                         channel: "facebook",
                         status: "received",
-                        metadata: { fb_mid: mid }
+                        metadata: { fb_mid: mid, page_id: pageId, is_admin_request: true }
                     });
                     await sendMessage(pageId, connection.page_access_token, senderId, "ခဏစောင့်ပေးပါခင်ဗျာ။ Admin မှ မကြာခင် ပြန်လည်ဖြေကြားပေးပါမည်။ 🙏");
                     continue;
