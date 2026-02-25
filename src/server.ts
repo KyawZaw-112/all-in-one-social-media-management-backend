@@ -20,6 +20,12 @@ import logger from "./utils/logger.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// 📝 Request Logger (Pre-middleware)
+app.use((req, res, next) => {
+    console.log(`🌐 [REQUEST] ${req.method} ${req.path} - ${new Date().toISOString()}`);
+    next();
+});
+
 // Middleware Setup
 app.use(cors({
     origin: [
