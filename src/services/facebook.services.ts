@@ -64,25 +64,33 @@ export async function subscribePageToWebhook(
     pageId: string,
     pageAccessToken: string
 ) {
-    const response = await fetch(
-        `https://graph.facebook.com/v21.0/${pageId}/subscribed_apps`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                access_token: pageAccessToken,
-                subscribed_fields: ["messages", "messaging_postbacks", "messaging_optins", "message_deliveries", "message_reads"],
-            }),
+    try {
+        console.log(`📡 [SUBSCRIBE] Calling Facebook API to subscribe Page ${pageId}...`);
+        const response = await fetch(
+            `https://graph.facebook.com/v21.0/${pageId}/subscribed_apps`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    access_token: pageAccessToken,
+                    subscribed_fields: ["messages", "messaging_postbacks", "messaging_optins", "message_deliveries", "message_reads"],
+                }),
+            }
+        );
+
+        const data: any = await response.json();
+        if (!response.ok) {
+            console.error("❌ [SUBSCRIBE] Failed:", JSON.stringify(data));
+            throw new Error(data.error?.message || "Failed to subscribe webhook");
         }
-    );
 
-    const data: any = await response.json();
-    if (!response.ok) {
-        console.error("Subscribe failed:", data);
-        throw new Error(data.error?.message || "Failed to subscribe webhook");
+        console.log(`✅ [SUBSCRIBE] Page ${pageId} webhook subscription SUCCESS:`, JSON.stringify(data));
+    } catch (err: any) {
+        console.error(`❌ [SUBSCRIBE] Page ${pageId} webhook subscription ERROR:`, err.message);
+        throw err;
     }
-
 }
+
 
 
 export async function getUserPages(userAccessToken: string) {
