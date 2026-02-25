@@ -66,30 +66,38 @@ router.delete("/:pageId", requireAuth, async (req, res) => {
             .eq("page_id", pageId);
         if (error)
             throw error;
-        // 2. Delete ALL automation flows for this user
+        // 2. [DISABLED] Delete ALL automation flows for this user
+        // We preserve flows even if page is disconnected to avoid data loss
+        /*
         const { error: flowError } = await supabaseAdmin
             .from("automation_flows")
             .delete()
             .eq("merchant_id", userId);
+
         if (flowError) {
             console.error("Failed to delete automation flows:", flowError);
         }
+
         // 3. Delete ALL auto-reply templates for this user
         const { error: templateError } = await supabaseAdmin
             .from("auto_reply_templates")
             .delete()
             .eq("merchant_id", userId);
+
         if (templateError) {
             console.error("Failed to delete auto-reply templates:", templateError);
         }
+
         // 4. Delete ALL auto-reply rules for this user
         const { error: ruleError } = await supabaseAdmin
             .from("auto_reply_rules")
             .delete()
             .eq("merchant_id", userId);
+
         if (ruleError) {
             console.error("Failed to delete auto-reply rules:", ruleError);
         }
+        */
         // 5. Clear page_id from merchant profile
         await supabaseAdmin
             .from("merchants")

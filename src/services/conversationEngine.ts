@@ -551,8 +551,11 @@ export async function runConversationEngine(
         rates = await fetchMerchantRates(merchantId);
     }
 
-    // Merge hardcoded steps with metadata overrides and filters
-    const baseSteps = flowDef.steps;
+    // Merge hardcoded steps with metadata overrides and flow.steps
+    const baseSteps = (flow.steps && Array.isArray(flow.steps) && flow.steps.length > 0)
+        ? flow.steps
+        : flowDef.steps;
+
     const mergedSteps = baseSteps
         .map((step: any) => {
             const override = metadata.steps?.[step.field];

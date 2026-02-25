@@ -11,6 +11,8 @@ import adminPaymentsRoutes from "./routes/adminPayments.js";
 import platformsRoutes from "./routes/platforms.js";
 import autoReplyRoutes from "./routes/autoReply.js";
 import merchantRoutes from "./routes/merchants.js";
+import productsRoutes from "./routes/products.js";
+import ratesRoutes from "./routes/rates.js";
 import logger from "./utils/logger.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -21,6 +23,8 @@ app.use(cors({
         "https://ashy.vercel.app",
         "https://all-in-one-social-media-management-ashy.vercel.app",
         "https://all-in-one-social-media-management-frontend-eta.vercel.app",
+        "https://oraculum.click",
+        "https://all-in-one-social-media-management-frontend-pjz9v4t57.vercel.app",
         process.env.FRONTEND_URL || ""
     ].filter(Boolean),
     credentials: true,
@@ -28,6 +32,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({
+    limit: '10mb',
     verify: (req, res, buf) => {
         req.rawBody = buf;
     }
@@ -46,6 +51,8 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/admin/payments", adminPaymentsRoutes);
 app.use("/api/platforms", platformsRoutes);
 app.use("/api/auto-reply", autoReplyRoutes);
+app.use("/api/products", productsRoutes);
+app.use("/api/rates", ratesRoutes);
 console.log("📦 Registering merchants route...");
 if (merchantRoutes) {
     app.use("/api/merchants", merchantRoutes);

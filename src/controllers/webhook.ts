@@ -92,17 +92,21 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     continue;
                 }
 
-                // Deduplication
+                // Deduplication (fail-safe)
                 if (mid) {
-                    const { data: existingMsg } = await supabaseAdmin
-                        .from("messages")
-                        .select("id")
-                        .contains('metadata', { fb_mid: mid })
-                        .maybeSingle();
+                    try {
+                        const { data: existingMsg } = await supabaseAdmin
+                            .from("messages")
+                            .select("id")
+                            .contains('metadata', { fb_mid: mid })
+                            .maybeSingle();
 
-                    if (existingMsg) {
-                        console.log("🛑 Duplicate mid detected, skipping:", mid);
-                        continue;
+                        if (existingMsg) {
+                            console.log("🛑 Duplicate mid detected, skipping:", mid);
+                            continue;
+                        }
+                    } catch (dedupErr: any) {
+                        console.warn("⚠️ Dedup check failed (proceeding anyway):", dedupErr?.message);
                     }
                 }
 
@@ -121,6 +125,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 }
 
                 const merchantId = connection.user_id || connection.merchant_id;
+                console.log(`🏪 [DEBUG] Merchant ID: ${merchantId}`);
 
                 // 1.2️⃣ Admin Keyword Check (Silence Bot)
                 const adminKeywords = ["admin", "အက်မင်", "မင်မင်"];
@@ -140,11 +145,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     continue;
                 }
 
-                const { data: merchant } = await supabaseAdmin
+                const { data: merchant, error: merchantError } = await supabaseAdmin
                     .from("merchants")
                     .select("subscription_status, trial_ends_at, business_type")
                     .eq("id", merchantId)
                     .maybeSingle();
+                console.log(`👤 [DEBUG] Merchant: ${merchant ? `found (type: ${merchant.business_type})` : `NOT FOUND`} | Error: ${merchantError?.message || 'none'}`);
 
                 // 2️⃣ Check for active conversation
                 let isResuming = true;
@@ -157,6 +163,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     .order("created_at", { ascending: false });
 
                 let conversation = activeConvs && activeConvs.length > 0 ? activeConvs[0] : null;
+                console.log(`💬 [DEBUG] Active conversation: ${conversation ? conversation.id : 'NONE'} | Count: ${activeConvs?.length || 0}`);
 
                 // Cleanup redundant conversations
                 if (activeConvs && activeConvs.length > 1) {
@@ -171,11 +178,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     isResuming = false;
                     const rawMessage = messageText.toLowerCase().trim();
 
-                    const { data: flows } = await supabaseAdmin
+                    const { data: flows, error: flowsError } = await supabaseAdmin
                         .from("automation_flows")
                         .select("*")
                         .eq("merchant_id", merchantId)
                         .eq("is_active", true);
+                    console.log(`📋 [DEBUG] Active flows: ${flows?.length || 0} | Error: ${flowsError?.message || 'none'} | Types: ${flows?.map(f => f.business_type).join(', ') || 'N/A'}`);
 
                     const matchedFlow = flows?.find(f => {
                         const keywords = f.trigger_keyword.toLowerCase().split(',').map((k: string) => k.trim());
@@ -246,7 +254,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         user_id: merchantId,
                         sender_id: senderId,
                         sender_email: senderId,
-                        sender_name: "Facebook User",
+                        sender_name: senderName,
                         body: messageText,
                         channel: "facebook",
                         status: "received",
@@ -254,7 +262,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         metadata: { conversation_id: conversation.id, fb_mid: mid }
                     });
 
-                    isResuming = false;
+                    // For new conversations, we process the trigger message IMMEDIATELY after welcome
+                    isResuming = true;
                 } else {
                     // Normal flow loading
                     if (conversation.flow_id) {
@@ -294,9 +303,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         return acc;
                     }, {});
 
+                    // Normalize payment method
                     if (cleanData.payment && !cleanData.payment_method) cleanData.payment_method = cleanData.payment;
 
                     if (businessType === 'cargo') {
+                        // Extract allowed columns only to prevent DB errors
                         const shipmentData: any = {
                             merchant_id: merchantId,
                             conversation_id: conversation.id,
@@ -311,7 +322,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             full_name: cleanData.full_name,
                             phone: cleanData.phone,
                             address: cleanData.address,
-                            item_photos: cleanData.item_photos,
+                            item_photos: cleanData.item_photos || [],
                             notes: cleanData.notes,
                             status: "pending",
                         };
@@ -334,7 +345,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             delivery: cleanData.delivery,
                             notes: cleanData.notes,
                             total_amount: cleanData.total_amount,
-                            item_photos: cleanData.item_photos,
+                            item_photos: cleanData.item_photos || [],
                             status: "pending",
                         };
 

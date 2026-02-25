@@ -26,8 +26,9 @@ router.get("/", requireAuth, async (req, res) => {
  * STEP 1: Redirect user to Facebook OAuth
  * GET /api/oauth/facebook
  */
-router.get("/facebook", async (req, res) => {
-    const userId = req.query.userId; // frontend ကပို့မယ်
+// Updated to requireAuth for security — prevents anyone from starting a flow for another userId
+router.get("/facebook", requireAuth, async (req, res) => {
+    const userId = req.user.id; // Get from authenticated session, not query param
     const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID,
         redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
@@ -45,7 +46,9 @@ router.get("/facebook", async (req, res) => {
 router.get("/facebook/callback", async (req, res) => {
     try {
         const { code, state } = req.query;
+        console.log("📥 Received FB Callback (code exists:", !!code, "state:", state, ")");
         const userId = state;
+        console.log("📡 Fetching user access token...");
         const tokenRes = await axios.get("https://graph.facebook.com/v19.0/oauth/access_token", {
             params: {
                 client_id: process.env.FACEBOOK_APP_ID,
@@ -106,25 +109,37 @@ router.get("/facebook/callback", async (req, res) => {
             .select("id, business_type")
             .eq("id", userId)
             .maybeSingle();
+        // 🔥 FIX: Liberate page_id from any other merchant record to avoid unique constraint violation
+        console.log(`🔓 Liberating page_id ${page.id} from other records...`);
+        await supabaseAdmin
+            .from("merchants")
+            .update({ page_id: `liberated-${Date.now()}-${page.id}` })
+            .eq("page_id", page.id)
+            .neq("id", userId);
+        await supabaseAdmin
+            .from("platform_connections")
+            .delete()
+            .eq("page_id", page.id)
+            .neq("user_id", userId);
         if (!existingMerchant) {
             console.log("⚠️ Creating missing merchant record during FB callback for user:", userId);
+            // Default to online_shop ONLY if record is missing entirely
             const { error: merchError } = await supabaseAdmin.from("merchants").insert({
                 id: userId,
                 page_id: page.id,
                 business_name: page.name,
-                business_type: "online_shop", // Default if record is missing entirely
+                business_type: "online_shop",
                 subscription_plan: "online_shop",
                 subscription_status: "active",
                 trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             });
             if (merchError)
-                logger.error("Failed to create missing merchant", merchError, { userId });
-            // 🔥 Seed default flows for auto-created merchant
-            await seedDefaultFlows(userId, "online_shop");
+                throw merchError;
         }
         else {
             console.log("✅ Merchant record already exists. Current type:", existingMerchant.business_type);
         }
+        console.log("💾 Upserting platform_connection...");
         const { error: insertError } = await supabaseAdmin
             .from("platform_connections")
             .upsert({
@@ -134,14 +149,11 @@ router.get("/facebook/callback", async (req, res) => {
             page_name: page.name,
             page_access_token: page.access_token,
         }, { onConflict: "user_id,page_id" });
-        if (insertError) {
-            logger.error("Insert error in platform_connections", insertError, { userId, pageId: page.id });
-            if (insertError.message.includes("row-level security policy")) {
-                throw new Error("Database Access Error: RLS violation. Please handle this in Supabase.");
-            }
+        if (insertError)
             throw insertError;
-        }
         // Update Merchant Profile with Page Info
+        // CRITICAL: We DO NOT update business_type here to avoid resetting it.
+        console.log(`📝 Updating merchant ${userId} with page_id: ${page.id}`);
         await supabaseAdmin
             .from("merchants")
             .update({
@@ -149,8 +161,14 @@ router.get("/facebook/callback", async (req, res) => {
             business_name: page.name,
         })
             .eq("id", userId);
-        // 🔥 Fallback seeding (idempotent): Ensure they have at least one flow
-        const bType = existingMerchant?.business_type || "online_shop";
+        // 🔥 Idempotent seeding: Only seed if the merchant HAS NO FLOWS
+        // We fetch the latest type to be safe
+        const { data: finalMerchant } = await supabaseAdmin
+            .from("merchants")
+            .select("business_type")
+            .eq("id", userId)
+            .maybeSingle();
+        const bType = finalMerchant?.business_type || "online_shop";
         await seedDefaultFlows(userId, bType);
         // Subscribe Webhook
         console.log(`📡 Subscribing Page ${page.id} to webhooks...`);
@@ -159,7 +177,11 @@ router.get("/facebook/callback", async (req, res) => {
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?connected=facebook`);
     }
     catch (error) {
-        logger.error("OAuth Error", error, { userId: req.query.state });
+        console.error("🔥 OAuth Callback Exception:", error);
+        console.error("Error Message:", error.message);
+        if (error.response) {
+            console.error("FB API Error Response:", JSON.stringify(error.response.data, null, 2));
+        }
         const errorMsg = encodeURIComponent(error.message || "OAuth validation failed");
         res.redirect(`${process.env.FRONTEND_URL}/dashboard/platforms?error=true&message=${errorMsg}`);
     }
@@ -213,25 +235,18 @@ router.post("/register", async (req, res) => {
             throw new Error("User creation failed");
         // Use explicit business_type or derive from subscription_plan
         const businessType = req.body.business_type || (subscription_plan === 'cargo' ? 'cargo' : 'online_shop');
-        console.log("🏪 Creating merchant profile for user:", authData.user.id);
-        const { error: merchantError } = await supabaseAdmin.from("merchants").insert({
-            id: authData.user.id,
-            page_id: `pending-${authData.user.id}`, // Unique placeholder to satisfy NOT NULL & UNIQUE
-            business_name: `${name}'s Business`,
-            subscription_plan: subscription_plan || 'online_shop',
-            business_type: businessType, // Save business type
-            trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            subscription_status: 'active'
+        console.log("🏪 Creating merchant profile for user via RPC:", authData.user.id);
+        const { error: merchantError } = await supabaseAdmin.rpc("create_merchant_profile", {
+            p_id: authData.user.id,
+            p_page_id: `pending-${authData.user.id}`,
+            p_business_name: `${name}'s Business`,
+            p_subscription_plan: subscription_plan || 'online_shop',
+            p_business_type: businessType,
+            p_trial_ends_at: trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         });
         if (merchantError) {
-            logger.error("❌ Merchant profile creation FAILED", merchantError, { email });
-            // If it's a unique constraint on ID, maybe the merchant was created by a trigger?
-            if (merchantError.code === '23505') {
-                console.log("♻️ Merchant already exists, skipping insert.");
-            }
-            else {
-                throw new Error(`Failed to create merchant profile: ${merchantError.message}`);
-            }
+            logger.error("❌ Merchant profile creation via RPC FAILED", merchantError, { userId: authData.user.id, email });
+            throw new Error(`Database RLS Error: Failed to create merchant profile via RPC. Error: ${merchantError.message}`);
         }
         console.log("✅ Merchant profile created successfully");
         // 🔥 Seed default flows
