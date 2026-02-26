@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
@@ -8,88 +9,79 @@ const supabaseAdmin = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const BLUH_PAGE_ID = "957808180755824";
-const KAY_PAGE_ID = "100530332303174";
+async function deepDebug() {
+    const pages = [
+        { name: "Bluh bluh (NOT working)", id: "957808180755824" },
+        { name: "Kay (Working)", id: "100530332303174" }
+    ];
 
-async function debugPage(pageName: string, pageId: string) {
-    console.log(`\n${"=".repeat(50)}`);
-    console.log(`🔍 Debugging: ${pageName} (${pageId})`);
-    console.log("=".repeat(50));
+    for (const page of pages) {
+        console.log(`\n${"=".repeat(60)}`);
+        console.log(`🔍 ${page.name} | Page ID: ${page.id}`);
+        console.log("=".repeat(60));
 
-    // 1. Check platform_connections
-    const { data: conn, error: connErr } = await supabaseAdmin
-        .from("platform_connections")
-        .select("*")
-        .eq("page_id", pageId)
-        .maybeSingle();
+        const { data: conn } = await supabaseAdmin
+            .from("platform_connections")
+            .select("*")
+            .eq("page_id", page.id)
+            .maybeSingle();
 
-    if (!conn) {
-        console.log("❌ No platform_connection found!");
-        return;
-    }
-    console.log(`✅ Connection found | merchant_id: ${conn.user_id || conn.merchant_id} | page_name: ${conn.page_name}`);
+        if (!conn) { console.log("❌ No connection!"); continue; }
 
-    const merchantId = conn.user_id || conn.merchant_id;
+        const token = conn.page_access_token;
 
-    // 2. Check merchant profile
-    const { data: merchant, error: merchantErr } = await supabaseAdmin
-        .from("merchants")
-        .select("id, email, subscription_status, trial_ends_at, business_type")
-        .eq("id", merchantId)
-        .maybeSingle();
-
-    if (!merchant) {
-        console.log("❌ Merchant NOT found in merchants table!");
-    } else {
-        console.log(`✅ Merchant: ${merchant.email} | type: ${merchant.business_type} | sub: ${merchant.subscription_status} | trial: ${merchant.trial_ends_at}`);
-    }
-
-    // 3. Check automation flows
-    const { data: flows, error: flowErr } = await supabaseAdmin
-        .from("automation_flows")
-        .select("id, business_type, trigger_keyword, is_active")
-        .eq("merchant_id", merchantId);
-
-    if (!flows || flows.length === 0) {
-        console.log("❌ NO automation_flows found for this merchant!");
-    } else {
-        console.log(`📋 Automation Flows (${flows.length}):`);
-        flows.forEach(f => {
-            console.log(`   ${f.is_active ? "✅" : "❌"} [${f.business_type}] trigger: "${f.trigger_keyword}" | active: ${f.is_active}`);
-        });
-    }
-
-    // 4. Check active conversations
-    const { data: convos } = await supabaseAdmin
-        .from("conversations")
-        .select("id, status, created_at, user_psid")
-        .eq("merchant_id", merchantId)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(3);
-
-    console.log(`💬 Active conversations: ${convos?.length || 0}`);
-    convos?.forEach(c => {
-        console.log(`   - ${c.id} | psid: ${c.user_psid} | ${c.created_at}`);
-    });
-
-    // 5. Check page access token validity
-    try {
-        const resp = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=name,access_token&access_token=${conn.page_access_token}`);
-        const data = await resp.json();
-        if (data.error) {
-            console.log(`❌ Token INVALID: ${data.error.message}`);
-        } else {
-            console.log(`✅ Token VALID | Page name from API: ${data.name}`);
+        // 1. Page info
+        try {
+            const info = await axios.get(`https://graph.facebook.com/v21.0/${page.id}`, {
+                params: { access_token: token, fields: "name,id,category,is_published,verification_status,new_like_count" }
+            });
+            console.log(`📄 Page Info:`, JSON.stringify(info.data, null, 2));
+        } catch (e: any) {
+            console.log("❌ Page info error:", e.response?.data?.error?.message);
         }
-    } catch (e: any) {
-        console.log(`❌ Token check failed: ${e.message}`);
+
+        // 2. Check connected app permissions
+        try {
+            const subs = await axios.get(`https://graph.facebook.com/v21.0/${page.id}/subscribed_apps`, {
+                params: { access_token: token }
+            });
+            console.log(`📊 Subscribed apps:`, JSON.stringify(subs.data.data, null, 2));
+        } catch (e: any) {
+            console.log("❌ Subs error:", e.response?.data?.error?.message);
+        }
+
+        // 3. Check page conversations (to see if FB is receiving messages)
+        try {
+            const convos = await axios.get(`https://graph.facebook.com/v21.0/${page.id}/conversations`, {
+                params: { access_token: token, limit: 3 }
+            });
+            console.log(`💬 FB Conversations:`, convos.data.data?.length, "found");
+            convos.data.data?.forEach((c: any) => {
+                console.log(`   - ${c.id} | updated: ${c.updated_time}`);
+            });
+        } catch (e: any) {
+            console.log("❌ Conversations error:", e.response?.data?.error?.message);
+        }
+
+        // 4. Token debug
+        try {
+            const dbg = await axios.get(`https://graph.facebook.com/debug_token`, {
+                params: {
+                    input_token: token,
+                    access_token: `${process.env.FACEBOOK_APP_ID}|${process.env.FACEBOOK_APP_SECRET}`
+                }
+            });
+            const d = dbg.data.data;
+            console.log(`🔑 Token Debug:`);
+            console.log(`   Type: ${d.type}`);
+            console.log(`   App ID: ${d.app_id}`);
+            console.log(`   Valid: ${d.is_valid}`);
+            console.log(`   Expires: ${d.expires_at === 0 ? 'NEVER' : new Date(d.expires_at * 1000).toISOString()}`);
+            console.log(`   Scopes: ${d.scopes?.join(', ')}`);
+        } catch (e: any) {
+            console.log("❌ Token debug error:", e.response?.data?.error?.message);
+        }
     }
 }
 
-async function main() {
-    await debugPage("Bluh bluh", BLUH_PAGE_ID);
-    await debugPage("Kay (Working)", KAY_PAGE_ID);
-}
-
-main();
+deepDebug();

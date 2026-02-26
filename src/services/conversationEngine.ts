@@ -802,9 +802,12 @@ export async function runConversationEngine(
             const isValid = currentStep.validation ? currentStep.validation(messageText, attachments) : true;
 
             if (!isValid) {
-                const errorReply =
-                    "❌ မှားယွင်းနေပါသည်။ ပြန်လည်ရိုက်ပေးပါ။\n\n" +
-                    currentStep.question;
+                const errorMsg = getTranslation({
+                    my: "❌ မှားယွင်းနေပါသည်။ ပြန်လည်ရိုက်ပေးပါ။",
+                    en: "❌ Invalid input. Please try again.",
+                    th: "❌ ข้อมูลไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง"
+                }, currentLang);
+                const errorReply = `${errorMsg}\n\n${getTranslation(currentStep.question, currentLang)}`;
 
                 await saveReplyMessage(conversation, flow, errorReply);
 
