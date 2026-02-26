@@ -108,8 +108,10 @@ export async function sendMessage(
     pageId: string,
     pageToken: string,
     recipientId: string,
-    text: string
+    message: string | any
 ): Promise<void> {
+    const messagePayload = typeof message === 'string' ? { text: message } : message;
+
     const response = await fetch(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`,
         {
@@ -117,7 +119,7 @@ export async function sendMessage(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 recipient: { id: recipientId },
-                message: { text },
+                message: messagePayload,
             }),
         }
     );

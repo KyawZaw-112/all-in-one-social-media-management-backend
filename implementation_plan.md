@@ -220,6 +220,40 @@ The goal is to allow merchants to fully customize their bot's conversation steps
 - Allow adding, removing, and reordering steps.
 - Support setting field names, question text, and options.
 
+## Debugging Auto-Reply Failure - Status Update
+
+The core logic has been updated with business type support and dynamic steps. Manual testing confirms the server endpoint is working correctly, but connectivity from Facebook is currently blocked.
+
+## Current Status
+- [x] Backend logic updated with debug logs.
+- [x] Manual POST testing: **SUCCESS** (Server receives and processes data).
+- [ ] Facebook-to-Server connectivity: **FAILING** (No requests hitting the server).
+
+## Investigation Points for User
+> [!IMPORTANT]
+> The server is verified healthy. The issue lies in the Facebook App configuration or Page settings.
+
+### 1. Developer Portal Check
+- **Callback URL**: Ensure there are no hidden spaces or typos.
+- **Verify Token**: Must be exactly `my_verify_token_123`.
+- **Page Subscription**: Confirm the Page is listed under "Subscribed Pages" in Messenger Settings with `messages` active.
+
+### 2. Facebook Page Settings
+- **Advanced Messaging**: Ensure the App is set as the Primary Receiver in the Handover Protocol.
+- **Access to Messages**: Ensure "Allow access to Page messages" is toggled ON.
+
+### 3. App Roles
+- The testing account **MUST** be an Admin or Developer of the Facebook App to trigger webhooks in Development Mode.
+- Page Admin status alone is not sufficient.
+4. Confirm data extraction matches business type
+5. Check orders/shipments are created with correct fields
+
+### Integration Testing
+1. Test full conversation flow for online shop order
+2. Test full conversation flow for cargo shipment
+3. Verify AI maintains context across messages
+4. Confirm completion detection works for both types
+
 ## Verification Plan
 - [ ] Run SQL migration and verify `steps` column exists.
 - [ ] Test bot flow with dynamic steps by modifying a flow's `steps` in Supabase.

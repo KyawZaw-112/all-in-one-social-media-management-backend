@@ -1,7 +1,7 @@
 import { sendMessage, sendImageMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { Request, Response } from "express";
-import { runConversationEngine, getDefaultReply, getWelcomeMessage } from "../services/conversationEngine.js";
+import { runConversationEngine, getDefaultReply, getWelcomeMessage, detectLanguage } from "../services/conversationEngine.js";
 import { FacebookWebhookPayload } from "../types/facebook.js";
 import logger from "../utils/logger.js";
 
@@ -233,7 +233,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         if (profile?.name) senderName = profile.name;
                     } catch (err) { }
 
-                    const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata);
+                    const userLang = detectLanguage(messageText);
+                    const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata, userLang);
                     try {
                         await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
                         await safeLogMessage({
@@ -294,6 +295,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
                 // 5️⃣ Run conversation engine
                 const result = await runConversationEngine(conversation, messageText, flow, attachments, isResuming);
+
+                // Update conversation state (temp_data)
+                if (result.temp_data) {
+                    await supabaseAdmin
+                        .from("conversations")
+                        .update({ temp_data: result.temp_data })
+                        .eq("id", conversation.id);
+                }
 
                 // 6️⃣ Completion Logic
                 if (result.order_complete) {
@@ -372,7 +381,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 }
 
                 try {
-                    await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+                    const finalMessage = result.interactive_message || result.reply;
+                    await sendMessage(pageId, connection.page_access_token, senderId, finalMessage);
                     await safeLogMessage({
                         user_id: merchantId,
                         sender_id: merchantId,
@@ -386,7 +396,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
                 } catch (sendErr) {
                     console.error("❌ Final sendMessage failed:", sendErr);
                 }
-
             } catch (innerError) {
                 console.error("🔴 Error processing messaging event:", innerError);
             }
