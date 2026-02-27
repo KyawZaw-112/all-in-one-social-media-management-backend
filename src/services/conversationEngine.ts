@@ -1,5 +1,4 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { scanPaymentSlip } from "../utils/ocr.js";
 
 /**
  * Rule-based Conversation Engine
@@ -113,6 +112,13 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
                 en: "Please select/type the Size 📏",
                 th: "กรุณาเลือก/พิมพ์ขนาด (Size) 📏"
             },
+            options: [
+                { label: "S", value: "S" },
+                { label: "M", value: "M" },
+                { label: "L", value: "L" },
+                { label: "XL", value: "XL" },
+                { label: { my: "မရှိပါ", en: "N/A", th: "ไม่มี" }, value: "-" },
+            ],
             validation: (v) => v.trim().length > 0,
         },
         {
@@ -122,6 +128,28 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
                 en: "Please select/type the Color 🎨",
                 th: "กรุณาเลือก/พิมพ์สี (Color) 🎨"
             },
+            options: [
+                { label: { my: "အဖြူ", en: "White", th: "ขาว" }, value: "White" },
+                { label: { my: "အမည်း", en: "Black", th: "ดำ" }, value: "Black" },
+                { label: { my: "အနီ", en: "Red", th: "แดง" }, value: "Red" },
+                { label: { my: "အပြာ", en: "Blue", th: "น้ำเงิน" }, value: "Blue" },
+                { label: { my: "မရှိပါ", en: "N/A", th: "ไม่มี" }, value: "-" },
+            ],
+            validation: (v) => v.trim().length > 0,
+        },
+        {
+            field: "payment_method",
+            question: {
+                my: "ငွေပေးချေမည့် နည်းလမ်း ရွေးပေးပါ 💳",
+                en: "Please select payment method 💳",
+                th: "กรุณာเลือกวิธีการชำระเงิน 💳"
+            },
+            options: [
+                { label: "KPay", value: "KPay" },
+                { label: "WavePay", value: "WavePay" },
+                { label: "Mobile Banking", value: "Mobile Banking" },
+                { label: { my: "အခြား", en: "Other", th: "อื่นๆ" }, value: "Other" },
+            ],
             validation: (v) => v.trim().length > 0,
         },
         {
@@ -152,12 +180,10 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             },
             transform: (v) => {
                 const n = parseInt(v);
-                if (n === 1) return "Delivery";
-                if (n === 2) return "Pickup";
-                const lower = v.toLowerCase();
-                if (lower.includes("delivery") || lower.includes("ပို့") || lower.includes("ส่ง")) return "Delivery";
-                return "Pickup";
-            },
+                if (n === 1 || v.toLowerCase().includes("delivery") || v.includes("ပို့") || v.includes("ส่ง")) return "Delivery";
+                if (n === 2 || v.toLowerCase().includes("pickup") || v.includes("ယူ")) return "Pickup";
+                return v;
+            }
         },
         {
             field: "address",
@@ -172,9 +198,9 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
         {
             field: "full_name",
             question: {
-                my: "သင်၏ အမည်အပြည့်အစုံ ထည့်ပေးပါ 👤",
-                en: "Please enter your full name 👤",
-                th: "กรุณากรอกชื่อ-นามสกุลของคุณ 👤"
+                my: "သင့်အမည် ထည့်ပေးပါ 👤",
+                en: "Please enter your name 👤",
+                th: "กรุณากรอกชื่อของคุณ 👤"
             },
             validation: (v) => v.trim().length > 1,
         },
@@ -196,17 +222,6 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             },
             validation: (v) => v.trim().length > 0,
         },
-        {
-            field: "payment_slip",
-            type: "media",
-            requiredCount: 1,
-            question: {
-                my: "ငွေလွှဲထားတဲ့ Slip (KPay/Wave) ပေးပို့ပေးပါခင်ဗျာ 📸",
-                en: "Please send the payment slip (KPay/Wave) 📸",
-                th: "กรุณาส่งสลิปการโอนเงิน (KPay/Wave) 📸"
-            },
-            validation: (v, attachments) => (attachments || []).some(a => a.type === 'image'),
-        },
     ],
     welcomeMessage: (senderName, pageName) => {
         return {
@@ -217,9 +232,9 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
     },
     completionMessage: (d, orderNo) => {
         return {
-            my: `🎉 Order လက်ခံပြီးပါပြီ!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n ပစ္စည်း : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 အရေအတွက် : ${d.quantity || "-"}\n� ငွေပမာဏ : ${d.payment_amount || "-"}\n🆔 Transaction ID : ${d.transaction_id || "-"}\n�🚚 ပို့ဆောင်မှု : ${d.delivery || "-"}\n👤 နာမည် : ${d.full_name || "-"}\n📞 ဖုန်း : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြလည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏`,
-            en: `🎉 Order Received!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n📝 Item : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 Qty : ${d.quantity || "-"}\n� Amount : ${d.payment_amount || "-"}\n🆔 TxID : ${d.transaction_id || "-"}\n�🚚 Delivery : ${d.delivery || "-"}\n👤 Name : ${d.full_name || "-"}\n📞 Phone : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 🙏`,
-            th: `🎉 ได้รับคำสั่งซื้อแล้ว!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ รายละเอียดคำสั่งซื้อ\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขที่สั่งซื้อ : #${orderNo}\n📝 สินค้า : ${d.product_name || d.item_name || "-"}\n📏 ขนาด : ${d.size || "-"}\n🎨 สี : ${d.color || "-"}\n🔢 จำนวน : ${d.quantity || "-"}\n� จำนวนเงิน : ${d.payment_amount || "-"}\n🆔 รหัสธุรกรรม : ${d.transaction_id || "-"}\n�🚚 การจัดส่ง : ${d.delivery || "-"}\n👤 ชื่อ : ${d.full_name || "-"}\n📞 โทร : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุด ขอบคุณครับ 🙏`
+            my: `🎉 Order လက်ခံပြီးပါပြီ!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n ပစ္စည်း : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 အရေအတွက် : ${d.quantity || "-"}\n🚚 ပို့ဆောင်မှု : ${d.delivery || "-"}\n👤 နာမည် : ${d.full_name || "-"}\n📞 ဖုန်း : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏`,
+            en: `🎉 Order Received!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n📝 Item : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 Qty : ${d.quantity || "-"}\n🚚 Delivery : ${d.delivery || "-"}\n👤 Name : ${d.full_name || "-"}\n📞 Phone : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 🙏`,
+            th: `🎉 ได้รับคำสั่งซื้อแล้ว!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ รายละเอียดคำสั่งซื้อ\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขที่สั่งซื้อ : #${orderNo}\n📝 สินค้า : ${d.product_name || d.item_name || "-"}\n📏 ขนาด : ${d.size || "-"}\n🎨 สี : ${d.color || "-"}\n🔢 จำนวน : ${d.quantity || "-"}\n🚚 การจัดส่ง : ${d.delivery || "-"}\n👤 ชื่อ : ${d.full_name || "-"}\n📞 โทร : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุด ขอบคุณครับ 🙏`
         };
     },
     incompleteMessage: {
@@ -262,6 +277,51 @@ export const CARGO_FLOW: ConversationFlowDef = {
                 if (lower.includes("ဂျပန်") || lower.includes("japan")) return "ဂျပန်";
                 return "အခြား";
             },
+        },
+        {
+            field: "shipping",
+            question: {
+                my: "ဘယ်လို ပို့မှာလဲ? 🚢\n\n1️⃣ ✈️ Air (လေကြောင်း)\n2️⃣ 🚢 Sea (ရေကြောင်း)",
+                en: "Shipping method? 🚢\n\n1️⃣ ✈️ Air\n2️⃣ 🚢 Sea",
+                th: "การส่งสินค้า? 🚢\n\n1️⃣ ✈️ ทางอากาศ (Air)\n2️⃣ 🚢 ทางเรือ (Sea)"
+            },
+            options: [
+                { label: { my: "Air", en: "Air", th: "แอร์" }, value: "Air" },
+                { label: { my: "Sea", en: "Sea", th: "เรือ" }, value: "Sea" },
+            ],
+            validation: (v) => {
+                const n = parseInt(v);
+                return (n >= 1 && n <= 2) || ["air", "sea", "ပို့", "လေ", "ရေ", "เครื่องบิน", "เรือ"].some(k => v.toLowerCase().includes(k));
+            },
+            transform: (v) => {
+                const n = parseInt(v);
+                if (n === 1 || v.toLowerCase().includes("air") || v.includes("လေ") || v.includes("เครื่องบิน")) return "Air";
+                return "Sea";
+            }
+        },
+        {
+            field: "item_type",
+            question: {
+                my: "ပစ္စည်းအမျိုးအစား ရွေးပေးပါ 📦\n\n1️⃣ 👕 အထည်အလိပ် / ဖိနပ် (Clothing)\n2️⃣ 💄 အလှကုန် / ဆေးဝါး (Cosmetics)\n3️⃣ 🔌 လျှပ်စစ်ပစ္စည်း (Electronics)\n4️⃣ 🍲 အစားအသောက် (Food)\n5️⃣ 🌍 အထွေထွေ (General)",
+                en: "Select Item Category 📦\n\n1️⃣ 👕 Clothing / Shoes\n2️⃣ 💄 Cosmetics / Medicine\n3️⃣ 🔌 Electronics\n4️⃣ 🍲 Food\n5️⃣ 🌍 General",
+                th: "เลือกประเภทสินค้า 📦\n\n1️⃣ 👕 เสื้อผ้า / รองเท้า\n2️⃣ 💄 เครื่องสำอาง / ยา\n3️⃣ 🔌 เครื่องใช้ไฟฟ้า\n4️⃣ 🍲 อาหาร\n5️⃣ 🌍 ทั่วไป"
+            },
+            options: [
+                { label: { my: "Clothing", en: "Clothing", th: "เสื้อผ้า" }, value: "Clothing" },
+                { label: { my: "Cosmetics", en: "Cosmetics", th: "เครื่องสำอาง" }, value: "Cosmetics" },
+                { label: { my: "Electronics", en: "Electronics", th: "ไฟฟ้า" }, value: "Electronics" },
+                { label: { my: "Food", en: "Food", th: "อาหาร" }, value: "Food" },
+                { label: { my: "General", en: "General", th: "ทั่วไป" }, value: "General" },
+            ],
+            validation: (v) => {
+                const n = parseInt(v);
+                return (n >= 1 && n <= 5) || v.trim().length > 1;
+            },
+            transform: (v) => {
+                const n = parseInt(v);
+                const map: Record<number, string> = { 1: "Clothing", 2: "Cosmetics", 3: "Electronics", 4: "Food", 5: "General" };
+                return map[n] || v;
+            }
         },
         {
             field: "shipping",
@@ -382,17 +442,6 @@ export const CARGO_FLOW: ConversationFlowDef = {
             },
             validation: (v) => v.replace(/[\s\-]/g, '').length >= 6,
         },
-        {
-            field: "payment_slip",
-            type: "media",
-            requiredCount: 1,
-            question: {
-                my: "ငွေလွှဲထားတဲ့ Slip (KPay/Wave) ပေးပို့ပေးပါခင်ဗျာ 📸",
-                en: "Please send the payment slip (KPay/Wave) 📸",
-                th: "กรุณาส่งสลิปการโอนเงิน (KPay/Wave) 📸"
-            },
-            validation: (v, attachments) => (attachments || []).some(a => a.type === 'image'),
-        },
     ],
     welcomeMessage: (senderName, pageName) => {
         return {
@@ -403,9 +452,9 @@ export const CARGO_FLOW: ConversationFlowDef = {
     },
     completionMessage: (d, refNo) => {
         return {
-            my: `ကျေးဇူးတင်ပါတယ် 🙏\nသင်၏ Cargo Request လက်ခံပြီးပါပြီ။\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 နိုင်ငံ: ${d.country || "-"}\n🚢 ပို့ဆောင်မှု: ${d.shipping || "-"}\n📦 အမျိုးအစား: ${d.item_type || "-"}\n📝 ပစ္စည်း: ${d.item_name || "-"}\n⚖️ အလေးချိန်: ${d.weight || "-"}\n💰 တန်ဖိုး: ${d.item_value || "-"}\n💵 ပေးချေမှု: ${d.payment_amount || "-"}\n🆔 TxID: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 နာမည်: ${d.full_name || "-"}\n📞 ဖုန်း: ${d.phone || "-"}\n📍 လိပ်စာ: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 😊`,
-            en: `Thank you! 🙏\nYour Cargo Request has been received.\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 Country: ${d.country || "-"}\n🚢 Shipping: ${d.shipping || "-"}\n📦 Category: ${d.item_type || "-"}\n📝 Item: ${d.item_name || "-"}\n⚖️ Weight: ${d.weight || "-"}\n💰 Value: ${d.item_value || "-"}\n💵 Amount: ${d.payment_amount || "-"}\n🆔 TxID: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: ${d.full_name || "-"}\n📞 Phone: ${d.phone || "-"}\n📍 Address: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 😊`,
-            th: `ขอบคุณครับ 🙏\nได้รับแจ้งรายการส่งสินค้า (Cargo Request) แล้วครับ\n\n━━━━━━━━━━━━━━━━━━━━\n📋 รายละเอียดการจัดส่ง\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขอ้างอิง: #${refNo}\n🌏 ประเทศ: ${d.country || "-"}\n🚢 การส่ง: ${d.shipping || "-"}\n📦 ประเภท: ${d.item_type || "-"}\n📝 สินค้า: ${d.item_name || "-"}\n⚖️ น้ำหนัก: ${d.weight || "-"}\n💰 มูลค่า: ${d.item_value || "-"}\n💵 จำนวนเงิน: ${d.payment_amount || "-"}\n🆔 รหัสธุรกรรม: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 ชื่อ: ${d.full_name || "-"}\n📞 โทร: ${d.phone || "-"}\n📍 ที่อยู่: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุดครับ ขอบคุณครับ 😊`
+            my: `ကျေးဇူးတင်ပါတယ် 🙏\nသင်၏ Cargo Request လက်ခံပြီးပါပြီ။\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 နိုင်ငံ: ${d.country || "-"}\n🚢 ပို့ဆောင်မှု: ${d.shipping || "-"}\n📦 အမျိုးအစား: ${d.item_type || "-"}\n📝 ပစ္စည်း: ${d.item_name || "-"}\n⚖️ အလေးချိန်: ${d.weight || "-"}\n💰 တန်ဖိုး: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 နာမည်: ${d.full_name || "-"}\n📞 ဖုန်း: ${d.phone || "-"}\n📍 လိပ်စာ: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 😊`,
+            en: `Thank you! 🙏\nYour Cargo Request has been received.\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 Country: ${d.country || "-"}\n🚢 Shipping: ${d.shipping || "-"}\n📦 Category: ${d.item_type || "-"}\n📝 Item: ${d.item_name || "-"}\n⚖️ Weight: ${d.weight || "-"}\n💰 Value: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: ${d.full_name || "-"}\n📞 Phone: ${d.phone || "-"}\n📍 Address: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 😊`,
+            th: `ขอบคุณครับ 🙏\nได้รับแจ้งรายการส่งสินค้า (Cargo Request) แล้วครับ\n\n━━━━━━━━━━━━━━━━━━━━\n📋 รายละเอียดการจัดส่ง\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขอ้างอิง: #${refNo}\n🌏 ประเทศ: ${d.country || "-"}\n🚢 การส่ง: ${d.shipping || "-"}\n📦 ประเภท: ${d.item_type || "-"}\n📝 สินค้า: ${d.item_name || "-"}\n⚖️ น้ำหนัก: ${d.weight || "-"}\n💰 มูลค่า: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 ชื่อ: ${d.full_name || "-"}\n📞 โทร: ${d.phone || "-"}\n📍 ที่อยู่: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุดครับ ขอบคุณครับ 😊`
         };
     },
     incompleteMessage: {
@@ -767,6 +816,7 @@ export async function runConversationEngine(
             return {
                 ...step,
                 question: override.question || step.question,
+                options: override.options || step.options,
                 enabled: override.enabled !== undefined ? override.enabled : true
             };
         })
@@ -793,8 +843,12 @@ export async function runConversationEngine(
 
     const currentStep = activeSteps[currentStepIndex] as any;
 
+    // 🔥 Fix: If it's the very first run (no data in tempData), it means the trigger message 
+    // was just received. We should NOT validate it as an answer to the first step.
+    const isNewTrigger = isResuming && Object.keys(tempData).filter(k => !k.startsWith('_')).length === 0;
+
     // If resuming (not a new trigger), validate and save the user's answer
-    if (isResuming && currentStep) {
+    if (isResuming && currentStep && !isNewTrigger) {
         if (currentStep.type === 'media') {
             // Handle Media/Attachments
             const incomingPhotos = (attachments || []).filter(a => a.type === 'image');
@@ -807,19 +861,6 @@ export async function runConversationEngine(
                 tempData[currentStep.field] = updatedPhotos;
                 delete tempData[`_warn_${currentStep.field}`];
 
-                // 🔥 Special Case: Payment Slip Scanning
-                if (currentStep.field === 'payment_slip' && updatedPhotos.length > 0) {
-                    const lastPhoto = updatedPhotos[updatedPhotos.length - 1];
-                    const ocrData = await scanPaymentSlip(lastPhoto);
-                    if (ocrData.is_valid) {
-                        tempData.payment_amount = ocrData.amount;
-                        tempData.transaction_id = ocrData.transaction_id;
-                        tempData._ocr_result = ocrData;
-
-                        // Add a feedback message or flag to be picked up by reply logic
-                        tempData._payment_confirmed = true;
-                    }
-                }
             } else if (!messageText) {
                 // Ignore if no text and no photos (shouldn't happen with relaxed guard but safe)
             } else {
@@ -839,8 +880,24 @@ export async function runConversationEngine(
 
                 await saveReplyMessage(conversation, flow, errorReply);
 
+                // Helper for generating interactive message in early returns
+                const getErrorInteractive = () => {
+                    if (currentStep.options && currentStep.options.length > 0) {
+                        return {
+                            text: errorReply,
+                            quick_replies: currentStep.options.slice(0, 13).map((opt: any) => ({
+                                content_type: "text",
+                                title: getTranslation(opt.label, currentLang).substring(0, 20),
+                                payload: opt.value
+                            }))
+                        };
+                    }
+                    return null;
+                };
+
                 return {
                     reply: errorReply,
+                    interactive_message: getErrorInteractive(),
                     temp_data: tempData,
                     order_complete: false,
                     business_type: businessType,
@@ -870,6 +927,7 @@ export async function runConversationEngine(
 
                 return {
                     reply: stockErrorReply,
+                    interactive_message: null, // Quantity usually doesn't have buttons
                     temp_data: tempData,
                     order_complete: false,
                     business_type: businessType,
@@ -1059,6 +1117,7 @@ export async function runConversationEngine(
             return {
                 ...step,
                 question: override.question || step.question,
+                options: override.options || step.options,
                 enabled: override.enabled !== undefined ? override.enabled : true
             };
         })
@@ -1159,14 +1218,6 @@ export async function runConversationEngine(
             } else {
                 let nextQuestion = getTranslation(nextStep.question, currentLang);
 
-                // OCR Feedback: If payment was just confirmed, prepend a success message
-                if (tempData._payment_confirmed) {
-                    const ocrMsg = currentLang === 'my' ? `✅ Payment Slip အတည်ပြုပြီးပါပြီ!\n💰 ပမာဏ: ${tempData.payment_amount}\n🆔 ID: ${tempData.transaction_id}\n\n` :
-                        currentLang === 'th' ? `✅ ยืนยันสลิปการโอนเงินแล้ว!\n💰 จำนวนเงิน: ${tempData.payment_amount}\n🆔 รหัส: ${tempData.transaction_id}\n\n` :
-                            `✅ Payment Slip Confirmed!\n💰 Amount: ${tempData.payment_amount}\n🆔 TxID: ${tempData.transaction_id}\n\n`;
-                    nextQuestion = ocrMsg + nextQuestion;
-                    delete tempData._payment_confirmed; // Clear it so it doesn't repeat
-                }
 
                 reply = `${flowProgress}\n\n${nextQuestion}`;
             }
