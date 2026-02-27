@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { scanPaymentSlip } from "../utils/ocr.js";
 
 /**
  * Rule-based Conversation Engine
@@ -195,6 +196,17 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
             },
             validation: (v) => v.trim().length > 0,
         },
+        {
+            field: "payment_slip",
+            type: "media",
+            requiredCount: 1,
+            question: {
+                my: "ငွေလွှဲထားတဲ့ Slip (KPay/Wave) ပေးပို့ပေးပါခင်ဗျာ 📸",
+                en: "Please send the payment slip (KPay/Wave) 📸",
+                th: "กรุณาส่งสลิปการโอนเงิน (KPay/Wave) 📸"
+            },
+            validation: (v, attachments) => (attachments || []).some(a => a.type === 'image'),
+        },
     ],
     welcomeMessage: (senderName, pageName) => {
         return {
@@ -205,9 +217,9 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
     },
     completionMessage: (d, orderNo) => {
         return {
-            my: `🎉 Order လက်ခံပြီးပါပြီ!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n ပစ္စည်း : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 အရေအတွက် : ${d.quantity || "-"}\n🚚 ပို့ဆောင်မှု : ${d.delivery || "-"}\n👤 နာမည် : ${d.full_name || "-"}\n📞 ဖုန်း : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏`,
-            en: `🎉 Order Received!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n📝 Item : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n� Qty : ${d.quantity || "-"}\n🚚 Delivery : ${d.delivery || "-"}\n� Name : ${d.full_name || "-"}\n📞 Phone : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 🙏`,
-            th: `🎉 ได้รับคำสั่งซื้อแล้ว!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ รายละเอียดคำสั่งซื้อ\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขที่สั่งซื้อ : #${orderNo}\n📝 สินค้า : ${d.product_name || d.item_name || "-"}\n📏 ขนาด : ${d.size || "-"}\n🎨 สี : ${d.color || "-"}\n🔢 จำนวน : ${d.quantity || "-"}\n🚚 การจัดส่ง : ${d.delivery || "-"}\n👤 ชื่อ : ${d.full_name || "-"}\n📞 โทร : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุด ขอบคุณครับ 🙏`
+            my: `🎉 Order လက်ခံပြီးပါပြီ!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n ပစ္စည်း : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 အရေအတွက် : ${d.quantity || "-"}\n� ငွေပမာဏ : ${d.payment_amount || "-"}\n🆔 Transaction ID : ${d.transaction_id || "-"}\n�🚚 ပို့ဆောင်မှု : ${d.delivery || "-"}\n👤 နာမည် : ${d.full_name || "-"}\n📞 ဖုန်း : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြလည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 🙏`,
+            en: `🎉 Order Received!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ ORDER DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Order No : #${orderNo}\n📝 Item : ${d.product_name || d.item_name || "-"}\n📏 Size : ${d.size || "-"}\n🎨 Color : ${d.color || "-"}\n🔢 Qty : ${d.quantity || "-"}\n� Amount : ${d.payment_amount || "-"}\n🆔 TxID : ${d.transaction_id || "-"}\n�🚚 Delivery : ${d.delivery || "-"}\n👤 Name : ${d.full_name || "-"}\n📞 Phone : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 🙏`,
+            th: `🎉 ได้รับคำสั่งซื้อแล้ว!\n\n━━━━━━━━━━━━━━━━━━━━\n🛍️ รายละเอียดคำสั่งซื้อ\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขที่สั่งซื้อ : #${orderNo}\n📝 สินค้า : ${d.product_name || d.item_name || "-"}\n📏 ขนาด : ${d.size || "-"}\n🎨 สี : ${d.color || "-"}\n🔢 จำนวน : ${d.quantity || "-"}\n� จำนวนเงิน : ${d.payment_amount || "-"}\n🆔 รหัสธุรกรรม : ${d.transaction_id || "-"}\n�🚚 การจัดส่ง : ${d.delivery || "-"}\n👤 ชื่อ : ${d.full_name || "-"}\n📞 โทร : ${d.phone || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุด ขอบคุณครับ 🙏`
         };
     },
     incompleteMessage: {
@@ -371,13 +383,15 @@ export const CARGO_FLOW: ConversationFlowDef = {
             validation: (v) => v.replace(/[\s\-]/g, '').length >= 6,
         },
         {
-            field: "address",
+            field: "payment_slip",
+            type: "media",
+            requiredCount: 1,
             question: {
-                my: "ပစ္စည်းရောက်ရှိမည့် လိပ်စာ ထည့်ပေးပါ 📍\n(မြို့နယ် / တိုင်းဒေသကြီးပါ ထည့်ပေးပါ)",
-                en: "Please enter the delivery address 📍\n(Township / State / Region)",
-                th: "กรุณาบอกที่อยู่สำหรับจัดส่งสินค้า 📍\n(ระบุเขต/อำเภอ และจังหวัดด้วยนะครับ)"
+                my: "ငွေလွှဲထားတဲ့ Slip (KPay/Wave) ပေးပို့ပေးပါခင်ဗျာ 📸",
+                en: "Please send the payment slip (KPay/Wave) 📸",
+                th: "กรุณาส่งสลิปการโอนเงิน (KPay/Wave) 📸"
             },
-            validation: (v) => v.trim().length > 3,
+            validation: (v, attachments) => (attachments || []).some(a => a.type === 'image'),
         },
     ],
     welcomeMessage: (senderName, pageName) => {
@@ -389,9 +403,9 @@ export const CARGO_FLOW: ConversationFlowDef = {
     },
     completionMessage: (d, refNo) => {
         return {
-            my: `ကျေးဇူးတင်ပါတယ် 🙏\nသင်၏ Cargo Request လက်ခံပြီးပါပြီ။\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 နိုင်ငံ: ${d.country || "-"}\n🚢 ပို့ဆောင်မှု: ${d.shipping || "-"}\n📦 အမျိုးအစား: ${d.item_type || "-"}\n📝 ပစ္စည်း: ${d.item_name || "-"}\n⚖️ အလေးချိန်: ${d.weight || "-"}\n💰 တန်ဖိုး: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 နာမည်: ${d.full_name || "-"}\n📞 ဖုန်း: ${d.phone || "-"}\n📍 လိပ်စာ: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 😊`,
-            en: `Thank you! 🙏\nYour Cargo Request has been received.\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 Country: ${d.country || "-"}\n🚢 Shipping: ${d.shipping || "-"}\n📦 Category: ${d.item_type || "-"}\n📝 Item: ${d.item_name || "-"}\n⚖️ Weight: ${d.weight || "-"}\n💰 Value: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: ${d.full_name || "-"}\n📞 Phone: ${d.phone || "-"}\n📍 Address: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 😊`,
-            th: `ขอบคุณครับ 🙏\nได้รับแจ้งรายการส่งสินค้า (Cargo Request) แล้วครับ\n\n━━━━━━━━━━━━━━━━━━━━\n📋 รายละเอียดการจัดส่ง\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขอ้างอิง: #${refNo}\n🌏 ประเทศ: ${d.country || "-"}\n🚢 การส่ง: ${d.shipping || "-"}\n📦 ประเภท: ${d.item_type || "-"}\n📝 สินค้า: ${d.item_name || "-"}\n⚖️ น้ำหนัก: ${d.weight || "-"}\n💰 มูลค่า: ${d.item_value || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 ชื่อ: ${d.full_name || "-"}\n📞 โทร: ${d.phone || "-"}\n📍 ที่อยู่: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุดครับ ขอบคุณครับ 😊`
+            my: `ကျေးဇူးတင်ပါတယ် 🙏\nသင်၏ Cargo Request လက်ခံပြီးပါပြီ။\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO အချက်အလက်\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 နိုင်ငံ: ${d.country || "-"}\n🚢 ပို့ဆောင်မှု: ${d.shipping || "-"}\n📦 အမျိုးအစား: ${d.item_type || "-"}\n📝 ပစ္စည်း: ${d.item_name || "-"}\n⚖️ အလေးချိန်: ${d.weight || "-"}\n💰 တန်ဖိုး: ${d.item_value || "-"}\n💵 ပေးချေမှု: ${d.payment_amount || "-"}\n🆔 TxID: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 နာမည်: ${d.full_name || "-"}\n📞 ဖုန်း: ${d.phone || "-"}\n📍 လိပ်စာ: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin မှ မကြာခင် ပြန်လည်ဆက်သွယ်ပေးပါမည်။ ကျေးဇူးတင်ပါသည် 😊`,
+            en: `Thank you! 🙏\nYour Cargo Request has been received.\n\n━━━━━━━━━━━━━━━━━━━━\n📋 CARGO DETAILS\n━━━━━━━━━━━━━━━━━━━━\n📌 Ref No: #${refNo}\n🌏 Country: ${d.country || "-"}\n🚢 Shipping: ${d.shipping || "-"}\n📦 Category: ${d.item_type || "-"}\n📝 Item: ${d.item_name || "-"}\n⚖️ Weight: ${d.weight || "-"}\n💰 Value: ${d.item_value || "-"}\n💵 Amount: ${d.payment_amount || "-"}\n🆔 TxID: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: ${d.full_name || "-"}\n📞 Phone: ${d.phone || "-"}\n📍 Address: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nAdmin will contact you shortly. Thank you! 😊`,
+            th: `ขอบคุณครับ 🙏\nได้รับแจ้งรายการส่งสินค้า (Cargo Request) แล้วครับ\n\n━━━━━━━━━━━━━━━━━━━━\n📋 รายละเอียดการจัดส่ง\n━━━━━━━━━━━━━━━━━━━━\n📌 เลขอ้างอิง: #${refNo}\n🌏 ประเทศ: ${d.country || "-"}\n🚢 การส่ง: ${d.shipping || "-"}\n📦 ประเภท: ${d.item_type || "-"}\n📝 สินค้า: ${d.item_name || "-"}\n⚖️ น้ำหนัก: ${d.weight || "-"}\n💰 มูลค่า: ${d.item_value || "-"}\n💵 จำนวนเงิน: ${d.payment_amount || "-"}\n🆔 รหัสธุรกรรม: ${d.transaction_id || "-"}\n━━━━━━━━━━━━━━━━━━━━\n👤 ชื่อ: ${d.full_name || "-"}\n📞 โทร: ${d.phone || "-"}\n📍 ที่อยู่: ${d.address || "-"}\n━━━━━━━━━━━━━━━━━━━━\nเจ้าหน้าที่จะติดต่อกลับหาคุณโดยเร็วที่สุดครับ ขอบคุณครับ 😊`
         };
     },
     incompleteMessage: {
@@ -792,6 +806,20 @@ export async function runConversationEngine(
                 const updatedPhotos = [...existingPhotos, ...newPhotoUrls];
                 tempData[currentStep.field] = updatedPhotos;
                 delete tempData[`_warn_${currentStep.field}`];
+
+                // 🔥 Special Case: Payment Slip Scanning
+                if (currentStep.field === 'payment_slip' && updatedPhotos.length > 0) {
+                    const lastPhoto = updatedPhotos[updatedPhotos.length - 1];
+                    const ocrData = await scanPaymentSlip(lastPhoto);
+                    if (ocrData.is_valid) {
+                        tempData.payment_amount = ocrData.amount;
+                        tempData.transaction_id = ocrData.transaction_id;
+                        tempData._ocr_result = ocrData;
+
+                        // Add a feedback message or flag to be picked up by reply logic
+                        tempData._payment_confirmed = true;
+                    }
+                }
             } else if (!messageText) {
                 // Ignore if no text and no photos (shouldn't happen with relaxed guard but safe)
             } else {
@@ -1129,7 +1157,18 @@ export async function runConversationEngine(
 
                 reply = `${flowProgress}\n\n${mediaProgress}\n\n${warnTip}${getTranslation(nextStep.question, currentLang)}`;
             } else {
-                reply = `${flowProgress}\n\n${getTranslation(nextStep.question, currentLang)}`;
+                let nextQuestion = getTranslation(nextStep.question, currentLang);
+
+                // OCR Feedback: If payment was just confirmed, prepend a success message
+                if (tempData._payment_confirmed) {
+                    const ocrMsg = currentLang === 'my' ? `✅ Payment Slip အတည်ပြုပြီးပါပြီ!\n💰 ပမာဏ: ${tempData.payment_amount}\n🆔 ID: ${tempData.transaction_id}\n\n` :
+                        currentLang === 'th' ? `✅ ยืนยันสลิปการโอนเงินแล้ว!\n💰 จำนวนเงิน: ${tempData.payment_amount}\n🆔 รหัส: ${tempData.transaction_id}\n\n` :
+                            `✅ Payment Slip Confirmed!\n💰 Amount: ${tempData.payment_amount}\n🆔 TxID: ${tempData.transaction_id}\n\n`;
+                    nextQuestion = ocrMsg + nextQuestion;
+                    delete tempData._payment_confirmed; // Clear it so it doesn't repeat
+                }
+
+                reply = `${flowProgress}\n\n${nextQuestion}`;
             }
         } else {
             reply = getTranslation(flowDef.incompleteMessage, currentLang);
