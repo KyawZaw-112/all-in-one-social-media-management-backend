@@ -251,31 +251,39 @@ export const CARGO_FLOW: ConversationFlowDef = {
         {
             field: "country",
             question: {
-                my: "ပစ္စည်း ဘယ်နိုင်ငံကနေ ပို့မှာလဲ? 🌏\n\n1️⃣ 🇨🇳 တရုတ် (China)\n2️⃣ 🇹🇭 ထိုင်း (Thailand)\n3️⃣ 🇯🇵 ဂျပန် (Japan)\n4️⃣ 🌍 အခြား (Other)",
-                en: "Which country is the item being sent from? 🌏\n\n1️⃣ 🇨🇳 China\n2️⃣ 🇹🇭 Thailand\n3️⃣ 🇯🇵 Japan\n4️⃣ 🌍 Other",
-                th: "สินค้าถูกส่งมาจากประเทศอะไร? 🌏\n\n1️⃣ 🇨🇳 จีน (China)\n2️⃣ 🇹🇭 ไทย (Thailand)\n3️⃣ 🇯🇵 ญี่ปุ่น (Japan)\n4️⃣ 🌍 อื่นๆ (Other)"
+                my: "ဘယ်လမ်းကြောင်း ပို့ချင်တာလဲ? 🌏\n\n1️⃣ 🇹🇭 ထိုင်း -> မြန်မာ 🇲🇲\n2️⃣ 🇨🇳 တရုတ် -> မြန်မာ 🇲🇲\n3️⃣ 🇰🇷 ကိုရီးယား -> မြန်မာ 🇲🇲\n4️⃣ 🇯🇵 ဂျပန် -> မြန်မာ 🇲🇲\n5️⃣ 🌍 အခြား (Other)",
+                en: "Which shipping route? 🌏\n\n1️⃣ 🇹🇭 Thailand -> Myanmar 🇲🇲\n2️⃣ 🇨🇳 China -> Myanmar 🇲🇲\n3️⃣ 🇰🇷 Korea -> Myanmar 🇲🇲\n4️⃣ 🇯🇵 Japan -> Myanmar 🇲🇲\n5️⃣ 🌍 Other",
+                th: "ต้องการส่งเส้นทางไหนครับ? 🌏\n\n1️⃣ 🇹🇭 ไทย -> พม่า 🇲🇲\n2️⃣ 🇨🇳 จีน -> พม่า 🇲🇲\n3️⃣ 🇰🇷 เกาหลี -> พม่า 🇲🇲\n4️⃣ 🇯🇵 ญี่ปุ่น -> พม่า 🇲🇲\n5️⃣ 🌍 อื่นๆ (Other)"
             },
             options: [
-                { label: { my: "တရုတ်", en: "China", th: "จีน" }, value: "တရုတ်" },
-                { label: { my: "ထိုင်း", en: "Thailand", th: "ไทย" }, value: "ထိုင်း" },
-                { label: { my: "ဂျပန်", en: "Japan", th: "ญี่ปุ่น" }, value: "ဂျပန်" },
-                { label: { my: "အခြား", en: "Other", th: "อื่นๆ" }, value: "အခြား" },
+                { label: "Thailand -> Myanmar", value: "Thailand -> Myanmar" },
+                { label: "China -> Myanmar", value: "China -> Myanmar" },
+                { label: "Korea -> Myanmar", value: "Korea -> Myanmar" },
+                { label: "Japan -> Myanmar", value: "Japan -> Myanmar" },
+                { label: { my: "အခြား", en: "Other", th: "อื่นๆ" }, value: "Other" },
             ],
             validation: (v) => {
                 const n = parseInt(v);
-                if (n >= 1 && n <= 4) return true;
+                if (n >= 1 && n <= 5) return true;
                 const lower = v.toLowerCase().trim();
-                return ["တရုတ်", "ထိုင်း", "ဂျပန်", "china", "thai", "japan", "အခြား", "other"].some(k => lower.includes(k));
+                return ["ထိုင်း", "တရုတ်", "ကိုရီးယား", "ဂျပန်", "china", "thai", "japan", "korea", "myanmar", "->"].some(k => lower.includes(k));
             },
             transform: (v) => {
                 const n = parseInt(v);
-                const map: Record<number, string> = { 1: "တရုတ်", 2: "ထိုင်း", 3: "ဂျပန်", 4: "အခြား" };
+                const map: Record<number, string> = {
+                    1: "Thailand -> Myanmar",
+                    2: "China -> Myanmar",
+                    3: "Korea -> Myanmar",
+                    4: "Japan -> Myanmar",
+                    5: "Other"
+                };
                 if (map[n]) return map[n];
                 const lower = v.toLowerCase();
-                if (lower.includes("တရုတ်") || lower.includes("china")) return "တရုတ်";
-                if (lower.includes("ထိုင်း") || lower.includes("thai")) return "ထိုင်း";
-                if (lower.includes("ဂျပန်") || lower.includes("japan")) return "ဂျပန်";
-                return "အခြား";
+                if (lower.includes("ထိုင်း") || lower.includes("thai")) return "Thailand -> Myanmar";
+                if (lower.includes("တရုတ်") || lower.includes("china")) return "China -> Myanmar";
+                if (lower.includes("ကိုရီးယား") || lower.includes("korea")) return "Korea -> Myanmar";
+                if (lower.includes("ဂျပန်") || lower.includes("japan")) return "Japan -> Myanmar";
+                return "Other";
             },
         },
         {
