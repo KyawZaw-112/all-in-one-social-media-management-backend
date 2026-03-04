@@ -853,7 +853,8 @@ export async function runConversationEngine(
 
     // 🔥 Fix: If it's the very first run (no data in tempData), it means the trigger message 
     // was just received. We should NOT validate it as an answer to the first step.
-    const isNewTrigger = isResuming && Object.keys(tempData).filter(k => !k.startsWith('_')).length === 0;
+    // We check for _trigger_processed flag to skip validation ONLY for the initial trigger.
+    const isNewTrigger = isResuming && Object.keys(tempData).filter(k => !k.startsWith('_')).length === 0 && !tempData._trigger_processed;
 
     // If resuming (not a new trigger), validate and save the user's answer
     if (isResuming && currentStep && !isNewTrigger) {
@@ -950,6 +951,10 @@ export async function runConversationEngine(
                 delete tempData.confirmation;
                 // We'll let the next step selection logic pick item_name again
             }
+        }
+        // Mark trigger as processed after the first run
+        if (isNewTrigger) {
+            tempData._trigger_processed = true;
         }
     }
 
