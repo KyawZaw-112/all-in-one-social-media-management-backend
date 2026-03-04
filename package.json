@@ -10,6 +10,7 @@
     "update-admin-password": "node --loader ts-node/esm -r dotenv/config src/scripts/updateAdminPassword.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.7",
     "axios": "^1.13.5",
     "bcrypt": "^6.0.0",

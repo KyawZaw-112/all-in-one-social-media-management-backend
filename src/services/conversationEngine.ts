@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { generateGeminiResponse } from "./gemini.service.js";
 
 /**
  * Rule-based Conversation Engine
@@ -617,6 +618,62 @@ export async function runConversationEngine(
     isResuming: boolean = true
 ) {
     const tempData = conversation.temp_data || {};
+
+    // 🧠 Check if this flow has an AI Prompt (Gemini Support)
+    if (flow.ai_prompt) {
+        console.log(`🤖 [AI] Using Gemini for flow: ${flow.name}`);
+
+        // Fetch last 10 messages for context
+        const { data: messages } = await supabaseAdmin
+            .from("messages")
+            .select("sender_name, body")
+            .eq("metadata->>conversation_id", conversation.id)
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+        // Format history for Gemini
+        const history = (messages || []).reverse().map(m => ({
+            role: m.sender_name === "Auto-Reply Bot" ? "model" as const : "user" as const,
+            parts: [{ text: m.body }]
+        }));
+
+        // Add current message to history if it's not already there (isResuming check)
+        if (isResuming && messageText) {
+            // Check if last message was already this one to avoid duplication
+            const lastMsg = history[history.length - 1];
+            if (!lastMsg || lastMsg.parts[0].text !== messageText) {
+                // history.push({ role: "user", parts: [{ text: messageText }] });
+            }
+        }
+
+        try {
+            const result = await generateGeminiResponse(flow.ai_prompt, history);
+
+            // Merge extracted data into tempData
+            const updatedData = { ...tempData, ...result.data };
+
+            // Save reply
+            await saveReplyMessage(conversation, flow, result.reply);
+
+            // Update conversation
+            await supabaseAdmin
+                .from("conversations")
+                .update({ temp_data: updatedData })
+                .eq("id", conversation.id);
+
+            return {
+                reply: result.reply,
+                interactive_message: null,
+                temp_data: updatedData,
+                order_complete: result.order_complete || false,
+                business_type: flow.business_type || 'online_shop',
+                shipment_complete: result.shipment_complete || false
+            };
+        } catch (aiError) {
+            console.error("⚠️ AI Failed, falling back to rule-based:", aiError);
+            // Fall through to rule-based engine
+        }
+    }
 
     // 🌐 Language Detection
     // If we have a saved language in temp_data, use it. Otherwise detect from current message.
