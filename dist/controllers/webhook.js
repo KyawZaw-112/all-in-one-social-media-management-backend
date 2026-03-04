@@ -1,6 +1,6 @@
 import { sendMessage, sendImageMessage, getUserProfile } from "../services/facebook.services.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { runConversationEngine, getWelcomeMessage } from "../services/conversationEngine.js";
+import { runConversationEngine, getWelcomeMessage, detectLanguage } from "../services/conversationEngine.js";
 import logger from "../utils/logger.js";
 /**
  * 🛡️ Helper to log messages to the DB without crashing the flow if DB fails (e.g. FK violation)
@@ -202,7 +202,8 @@ export const handleWebhook = async (req, res) => {
                             senderName = profile.name;
                     }
                     catch (err) { }
-                    const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata);
+                    const userLang = detectLanguage(messageText);
+                    const welcomeMsg = getWelcomeMessage(flow.business_type || 'online_shop', senderName, connection.page_name, flow.metadata, userLang);
                     try {
                         await sendMessage(pageId, connection.page_access_token, senderId, welcomeMsg);
                         await safeLogMessage({
@@ -260,6 +261,13 @@ export const handleWebhook = async (req, res) => {
                 }
                 // 5️⃣ Run conversation engine
                 const result = await runConversationEngine(conversation, messageText, flow, attachments, isResuming);
+                // Update conversation state (temp_data)
+                if (result.temp_data) {
+                    await supabaseAdmin
+                        .from("conversations")
+                        .update({ temp_data: result.temp_data })
+                        .eq("id", conversation.id);
+                }
                 // 6️⃣ Completion Logic
                 if (result.order_complete) {
                     const businessType = result.business_type || flow.business_type || 'online_shop';
@@ -339,7 +347,8 @@ export const handleWebhook = async (req, res) => {
                     }
                 }
                 try {
-                    await sendMessage(pageId, connection.page_access_token, senderId, result.reply);
+                    const finalMessage = result.interactive_message || result.reply;
+                    await sendMessage(pageId, connection.page_access_token, senderId, finalMessage);
                     await safeLogMessage({
                         user_id: merchantId,
                         sender_id: merchantId,

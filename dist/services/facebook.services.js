@@ -78,13 +78,14 @@ export async function getUserPages(userAccessToken) {
     });
     return data.data;
 }
-export async function sendMessage(pageId, pageToken, recipientId, text) {
+export async function sendMessage(pageId, pageToken, recipientId, message) {
+    const messagePayload = typeof message === 'string' ? { text: message } : message;
     const response = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${pageToken}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             recipient: { id: recipientId },
-            message: { text },
+            message: messagePayload,
         }),
     });
     if (!response.ok) {
