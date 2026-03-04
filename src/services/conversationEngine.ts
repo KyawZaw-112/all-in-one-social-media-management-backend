@@ -60,9 +60,10 @@ export const ONLINE_SHOP_FLOW: ConversationFlowDef = {
                 { label: { my: "Link", en: "Link", th: "ลิงก์" }, value: "Link" },
             ],
             validation: (v) => {
+                const lower = v.toLowerCase().trim();
                 const n = parseInt(v);
                 return (n >= 1 && n <= 3) ||
-                    ["live", "post", "link"].includes(v.toLowerCase().trim());
+                    ["live", "post", "link", "story"].some(k => lower.includes(k));
             },
             transform: (v) => {
                 const n = parseInt(v);
@@ -952,10 +953,11 @@ export async function runConversationEngine(
                 // We'll let the next step selection logic pick item_name again
             }
         }
-        // Mark trigger as processed after the first run
-        if (isNewTrigger) {
-            tempData._trigger_processed = true;
-        }
+    }
+
+    // 🔥 Mark trigger as processed after the first run (moved outside the validation block)
+    if (isNewTrigger) {
+        tempData._trigger_processed = true;
     }
 
     // After saving, re-evaluate active steps (skipIf may change based on new data)
