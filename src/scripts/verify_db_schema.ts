@@ -6,24 +6,23 @@ async function verifySchema() {
 
     const checks = [
         { table: 'automation_flows', columns: ['business_type', 'steps'] },
-        { table: 'orders', columns: ['item_photos'] },
-        { table: 'shipments', columns: ['item_photos', 'country', 'shipping'] }
+        { table: 'orders', columns: ['item_photos', 'order_no', 'item_id', 'payment', 'delivery', 'page_id'] },
+        { table: 'shipments', columns: ['item_photos', 'country', 'shipping', 'order_no', 'page_id'] }
     ];
 
     for (const check of checks) {
         console.log(`\nTable: ${check.table}`);
-        const { data, error } = await supabaseAdmin
-            .from(check.table)
-            .select(check.columns.join(','))
-            .limit(1);
+        for (const column of check.columns) {
+            const { error } = await supabaseAdmin
+                .from(check.table)
+                .select(column)
+                .limit(1);
 
-        if (error) {
-            console.error(`❌ Error checking ${check.table}:`, error.message);
-            if (error.message.includes('column') || error.message.includes('relation')) {
-                console.log(`💡 Missing schema elements detected for ${check.table}.`);
+            if (error) {
+                console.error(`❌ Column ${column} is MISSING in ${check.table}:`, error.message);
+            } else {
+                console.log(`✅ Column ${column} exists in ${check.table}.`);
             }
-        } else {
-            console.log(`✅ Table ${check.table} has required columns.`);
         }
     }
 }

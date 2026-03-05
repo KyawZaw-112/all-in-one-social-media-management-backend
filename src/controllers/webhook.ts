@@ -344,6 +344,16 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         const { error: shipInsertErr } = await supabaseAdmin.from("shipments").insert(shipmentData);
                         if (shipInsertErr) logger.error("❌ Failed to insert shipment", shipInsertErr);
                     } else {
+                        // Calculate total amount if item_price is available
+                        let totalAmount = cleanData.total_amount;
+                        if (!totalAmount && cleanData.item_price && cleanData.quantity) {
+                            const price = parseFloat(cleanData.item_price);
+                            const qty = parseInt(cleanData.quantity);
+                            if (!isNaN(price) && !isNaN(qty)) {
+                                totalAmount = price * qty;
+                            }
+                        }
+
                         const orderData: any = {
                             merchant_id: merchantId,
                             conversation_id: conversation.id,
@@ -359,7 +369,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             order_source: cleanData.order_source,
                             delivery: cleanData.delivery,
                             notes: cleanData.notes,
-                            total_amount: cleanData.total_amount,
+                            total_amount: totalAmount,
                             item_photos: cleanData.item_photos || [],
                             item_id: cleanData.item_id, // 🔥 Link order to product
                             status: "pending",
