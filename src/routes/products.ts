@@ -39,6 +39,7 @@ async function handleImageUpload(imageBase64: string, userId: string) {
         .from('product-images')
         .getPublicUrl(filePath);
 
+    console.log("✅ Image uploaded to Supabase:", publicUrl);
     return publicUrl;
 }
 
@@ -131,9 +132,15 @@ router.post("/", requireAuth, async (req: any, res) => {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error("❌ Database insert error:", error);
+            return res.status(400).json({ error: "Database error: " + error.message });
+        }
+
+        console.log("✅ Product created successfully:", data.id);
         res.json({ success: true, data });
     } catch (error: any) {
+        console.error("❌ Product POST crash:", error);
         res.status(500).json({ error: error.message });
     }
 });
