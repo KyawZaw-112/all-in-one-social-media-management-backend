@@ -6,6 +6,7 @@ async function verifySchema() {
 
     const checks = [
         { table: 'automation_flows', columns: ['business_type', 'steps'] },
+        { table: 'merchants', columns: ['business_type', 'subscription_plan'] },
         { table: 'orders', columns: ['item_photos', 'order_no', 'item_id', 'payment', 'delivery', 'page_id'] },
         { table: 'shipments', columns: ['item_photos', 'country', 'shipping', 'order_no', 'page_id'] }
     ];

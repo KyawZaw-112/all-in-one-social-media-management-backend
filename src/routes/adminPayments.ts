@@ -1,6 +1,6 @@
 import express from "express";
-import {supabaseAdmin} from "../supabaseAdmin.js";
-import {requireAdmin} from "../middleware/requireAdmin.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
+import { requireAdmin } from "../middleware/requireAdmin.js";
 
 const router = express.Router();
 
@@ -64,9 +64,10 @@ router.post("/approve/:id", requireAdmin, async (req, res) => {
             return res.status(400).json({ error: "Already approved" });
         }
 
+        const monthCount = payment.metadata?.monthCount || 1;
         const startDate = new Date();
         const endDate = new Date(
-            startDate.getTime() + 30 * 24 * 60 * 60 * 1000
+            startDate.getTime() + monthCount * 30 * 24 * 60 * 60 * 1000
         );
 
         // 2️⃣ Update payment
