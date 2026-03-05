@@ -361,6 +361,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             notes: cleanData.notes,
                             total_amount: cleanData.total_amount,
                             item_photos: cleanData.item_photos || [],
+                            item_id: cleanData.item_id, // 🔥 Link order to product
                             status: "pending",
                         };
 
@@ -375,17 +376,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         if (orderInsertErr) {
                             logger.error("❌ Failed to insert order", orderInsertErr);
                         } else {
-                            // 🔥 Smart Inventory Sync: Auto-deduct stock
-                            if (cleanData.item_id && cleanData.quantity) {
+                            // 🔥 Smart Inventory Sync: Auto-deduct stock if item_id exists
+                            const deductionItemId = cleanData.item_id || orderData.item_id;
+                            if (deductionItemId && cleanData.quantity) {
                                 try {
                                     const qty = parseInt(cleanData.quantity);
                                     if (!isNaN(qty) && qty > 0) {
                                         // Use RPC or separate select/update to decrement stock safely
-                                        // For now, a straightforward decrement check
+                                        console.log(`🔍 Attempting stock deduction for ${deductionItemId}, qty: ${qty}`);
                                         const { data: product } = await supabaseAdmin
                                             .from("products")
                                             .select("stock")
-                                            .eq("id", cleanData.item_id)
+                                            .eq("id", deductionItemId)
                                             .single();
 
                                         if (product) {
@@ -393,8 +395,10 @@ export const handleWebhook = async (req: Request, res: Response) => {
                                             await supabaseAdmin
                                                 .from("products")
                                                 .update({ stock: newStock })
-                                                .eq("id", cleanData.item_id);
-                                            console.log(`📉 Stock deducted for ${cleanData.item_id}: ${product.stock} -> ${newStock}`);
+                                                .eq("id", deductionItemId);
+                                            console.log(`📉 Stock deducted for ${deductionItemId}: ${product.stock} -> ${newStock}`);
+                                        } else {
+                                            console.warn(`⚠️ Stock deduction skipped: Product ${deductionItemId} not found.`);
                                         }
                                     }
                                 } catch (stockErr) {
@@ -450,7 +454,8 @@ Make it sound natural and encouraging. No yapping.`;
 
                     // 📄 Auto PDF Invoicing (Link Generation PoC)
                     try {
-                        const receiptUrl = `https://vibe-ai.com/receipt/${result.temp_data.order_no}`;
+                        const frontendUrl = process.env.FRONTEND_URL || 'https://oraculum.click';
+                        const receiptUrl = `${frontendUrl.replace(/\/$/, '')}/receipt/${result.temp_data.order_no}`;
                         const currentLang = result.temp_data?._lang || 'my';
                         const receiptMsg = result.business_type === 'cargo'
                             ? (currentLang === 'my' ? `📦 သင်၏ Shipment အတွက် ပြေစာကို ဤနေရာတွင် ကြည့်နိုင်ပါသည်: ${receiptUrl}` : `📦 You can view your shipment receipt here: ${receiptUrl}`)

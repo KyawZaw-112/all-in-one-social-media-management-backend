@@ -637,6 +637,29 @@ export async function runConversationEngine(conversation, messageText, flow, att
                 .from("conversations")
                 .update({ temp_data: updatedData })
                 .eq("id", conversation.id);
+            // 🔍 Post-AI Product Lookup: Map item_name to item_id if missing
+            if (result.data?.item_name && !updatedData.item_id) {
+                const merchantId = flow.merchant_id || conversation.merchant_id;
+                const { data: products } = await supabaseAdmin
+                    .from("products")
+                    .select("*")
+                    .eq("merchant_id", merchantId)
+                    .eq("is_active", true);
+                if (products) {
+                    const lowerV = result.data.item_name.toLowerCase().trim();
+                    const match = products.find(p => p.name.toLowerCase().includes(lowerV) ||
+                        lowerV.includes(p.name.toLowerCase()));
+                    if (match) {
+                        updatedData.item_id = match.id;
+                        updatedData.product_name = match.name;
+                        updatedData.item_price = match.price;
+                        updatedData.currency = match.currency;
+                        updatedData.item_image = match.image_url;
+                        updatedData._stock = match.stock;
+                        console.log(`🤖 [AI-Match] Linked ${result.data.item_name} to product: ${match.name} (${match.id})`);
+                    }
+                }
+            }
             return {
                 reply: result.reply,
                 interactive_message: null,

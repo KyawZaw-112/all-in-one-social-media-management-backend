@@ -148,17 +148,34 @@ router.put("/flows/:id", requireAuth, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { name, trigger_keyword, description, ai_prompt, is_active, metadata } = req.body;
+        const body = req.body;
+
+        // Extract valid fields for update
+        const updateData: any = {};
+        const allowedFields = ['name', 'trigger_keyword', 'description', 'ai_prompt', 'is_active', 'metadata'];
+
+        allowedFields.forEach(field => {
+            if (body[field] !== undefined) {
+                updateData[field] = body[field];
+            }
+        });
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: "No valid fields provided for update" });
+        }
 
         const { data, error } = await supabaseAdmin
             .from("automation_flows")
-            .update({ name, trigger_keyword, description, ai_prompt, is_active, metadata })
+            .update(updateData)
             .eq("id", id)
             .eq("merchant_id", userId)
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error("❌ Flow update error:", error);
+            return res.status(400).json({ error: error.message });
+        }
         res.json({ success: true, data });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
