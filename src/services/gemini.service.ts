@@ -55,3 +55,27 @@ export async function generateGeminiResponse(
         throw error;
     }
 }
+
+export async function generateResponse(prompt: string): Promise<string> {
+    try {
+        const key = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+        if (!key) throw new Error("GEMINI_API_KEY not found in environment");
+
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error: any) {
+        console.error("❌ Gemini Response Error:", error.message);
+        return "";
+    }
+}
+
+export const geminiService = {
+    generateGeminiResponse,
+    generateResponse,
+};
+
+export default geminiService;

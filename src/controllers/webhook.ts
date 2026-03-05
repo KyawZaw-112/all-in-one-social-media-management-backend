@@ -334,6 +334,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             item_photos: cleanData.item_photos || [],
                             notes: cleanData.notes,
                             status: "pending",
+                            status_history: [{
+                                status: "pending",
+                                message: "Shipment booking received",
+                                location: cleanData.country ? `From ${cleanData.country}` : "Initial Point",
+                                timestamp: new Date().toISOString()
+                            }]
                         };
                         const { error: shipInsertErr } = await supabaseAdmin.from("shipments").insert(shipmentData);
                         if (shipInsertErr) logger.error("❌ Failed to insert shipment", shipInsertErr);
@@ -366,9 +372,94 @@ export const handleWebhook = async (req: Request, res: Response) => {
                         }
 
                         const { error: orderInsertErr } = await supabaseAdmin.from("orders").insert(orderData);
-                        if (orderInsertErr) logger.error("❌ Failed to insert order", orderInsertErr);
+                        if (orderInsertErr) {
+                            logger.error("❌ Failed to insert order", orderInsertErr);
+                        } else {
+                            // 🔥 Smart Inventory Sync: Auto-deduct stock
+                            if (cleanData.item_id && cleanData.quantity) {
+                                try {
+                                    const qty = parseInt(cleanData.quantity);
+                                    if (!isNaN(qty) && qty > 0) {
+                                        // Use RPC or separate select/update to decrement stock safely
+                                        // For now, a straightforward decrement check
+                                        const { data: product } = await supabaseAdmin
+                                            .from("products")
+                                            .select("stock")
+                                            .eq("id", cleanData.item_id)
+                                            .single();
+
+                                        if (product) {
+                                            const newStock = Math.max(0, (product.stock || 0) - qty);
+                                            await supabaseAdmin
+                                                .from("products")
+                                                .update({ stock: newStock })
+                                                .eq("id", cleanData.item_id);
+                                            console.log(`📉 Stock deducted for ${cleanData.item_id}: ${product.stock} -> ${newStock}`);
+                                        }
+                                    }
+                                } catch (stockErr) {
+                                    console.warn("⚠️ Stock deduction failed", stockErr);
+                                }
+                            }
+                        }
                     }
                     await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
+
+                    // 🚀 AI Upselling: Suggest other products
+                    if (businessType !== 'cargo') {
+                        try {
+                            const { data: otherProducts } = await supabaseAdmin
+                                .from("products")
+                                .select("*")
+                                .eq("merchant_id", merchantId)
+                                .eq("is_active", true)
+                                .neq("id", cleanData.item_id)
+                                .limit(3);
+
+                            if (otherProducts && otherProducts.length > 0) {
+                                const productsList = otherProducts.map(p => `- ${p.name} (${p.price} ${p.currency})`).join('\n');
+                                const upsellPrompt = `You are a helpful sales assistant for ${connection.page_name}. 
+A customer just bought: ${cleanData.product_name || cleanData.item_name}.
+Here are some other products we have:
+${productsList}
+
+Write a very short, polite recommendation in Burmese (Unicode) suggesting 1-2 of these items. 
+Make it sound natural and encouraging. No yapping.`;
+
+                                const geminiService = (await import('../services/gemini.service.js')).default;
+                                const upsellMsg = await geminiService.generateResponse(upsellPrompt);
+
+                                if (upsellMsg) {
+                                    await sendMessage(pageId, connection.page_access_token, senderId, upsellMsg);
+                                    await safeLogMessage({
+                                        user_id: merchantId,
+                                        sender_id: merchantId,
+                                        sender_email: "AI-Assistant",
+                                        sender_name: "Auto-Reply Bot",
+                                        body: upsellMsg,
+                                        channel: "facebook",
+                                        status: "replied",
+                                        metadata: { conversation_id: conversation.id, type: "upsell" }
+                                    });
+                                }
+                            }
+                        } catch (upsellErr) {
+                            console.warn("⚠️ AI Upselling failed", upsellErr);
+                        }
+                    }
+
+                    // 📄 Auto PDF Invoicing (Link Generation PoC)
+                    try {
+                        const receiptUrl = `https://vibe-ai.com/receipt/${result.temp_data.order_no}`;
+                        const currentLang = result.temp_data?._lang || 'my';
+                        const receiptMsg = result.business_type === 'cargo'
+                            ? (currentLang === 'my' ? `📦 သင်၏ Shipment အတွက် ပြေစာကို ဤနေရာတွင် ကြည့်နိုင်ပါသည်: ${receiptUrl}` : `📦 You can view your shipment receipt here: ${receiptUrl}`)
+                            : (currentLang === 'my' ? `📄 သင်၏ Order ပြေစာကို ဤနေရာတွင် ကြည့်နိုင်ပါသည်: ${receiptUrl}` : `📄 You can view your order receipt here: ${receiptUrl}`);
+
+                        await sendMessage(pageId, connection.page_access_token, senderId, receiptMsg);
+                    } catch (pdfErr) {
+                        console.warn("⚠️ PDF Invoicing failed", pdfErr);
+                    }
                 }
 
                 // 7️⃣ Send Reply

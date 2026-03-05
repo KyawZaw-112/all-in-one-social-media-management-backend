@@ -15,6 +15,7 @@ import autoReplyRoutes from "./routes/autoReply.js";
 import merchantRoutes from "./routes/merchants.js";
 import productsRoutes from "./routes/products.js";
 import ratesRoutes from "./routes/rates.js";
+import driversRoutes from "./routes/drivers.js";
 import logger from "./utils/logger.js";
 
 const app = express();
@@ -65,6 +66,7 @@ app.use("/api/platforms", platformsRoutes);
 app.use("/api/auto-reply", autoReplyRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/rates", ratesRoutes);
+app.use("/api/drivers", driversRoutes);
 
 console.log("📦 Registering merchants route...");
 if (merchantRoutes) {

@@ -105,7 +105,7 @@ router.get("/flows", requireAuth, async (req, res) => {
 router.post("/flows", requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
-        const { name, trigger_keyword, description } = req.body;
+        const { name, trigger_keyword, description, ai_prompt } = req.body;
         const merchant = await getMerchant(userId);
         const businessType = merchant?.business_type || "online_shop";
         const { data, error } = await supabaseAdmin
@@ -116,6 +116,7 @@ router.post("/flows", requireAuth, async (req, res) => {
             business_type: businessType,
             trigger_keyword,
             description,
+            ai_prompt,
             is_active: true,
         })
             .select()
@@ -135,10 +136,10 @@ router.put("/flows/:id", requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { name, trigger_keyword, description, is_active, metadata } = req.body;
+        const { name, trigger_keyword, description, ai_prompt, is_active, metadata } = req.body;
         const { data, error } = await supabaseAdmin
             .from("automation_flows")
-            .update({ name, trigger_keyword, description, is_active, metadata })
+            .update({ name, trigger_keyword, description, ai_prompt, is_active, metadata })
             .eq("id", id)
             .eq("merchant_id", userId)
             .select()
@@ -184,6 +185,65 @@ router.patch("/flows/:id/toggle", requireAuth, async (req, res) => {
         res.json({ success: true, data });
     }
     catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+/**
+ * POST /api/merchants/broadcast
+ * Send a message to all unique PSIDs from conversations
+ */
+router.post("/broadcast", requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { message } = req.body;
+        if (!message) {
+            return res.status(400).json({ error: "Message content is required" });
+        }
+        // 1. Get platform connection for this merchant
+        const { data: connection, error: connErr } = await supabaseAdmin
+            .from("platform_connections")
+            .select("page_id, page_access_token, page_name")
+            .eq("merchant_id", userId)
+            .maybeSingle();
+        if (connErr || !connection) {
+            return res.status(400).json({ error: "No active platform connection found for broadcast" });
+        }
+        // 2. Get unique PSIDs from conversations
+        const { data: conversations, error: convErr } = await supabaseAdmin
+            .from("conversations")
+            .select("user_psid")
+            .eq("merchant_id", userId)
+            .not("user_psid", "is", null);
+        if (convErr)
+            throw convErr;
+        const uniquePsids = [...new Set(conversations.map(c => c.user_psid))];
+        if (uniquePsids.length === 0) {
+            return res.json({ success: true, count: 0, message: "No customers found to broadcast to" });
+        }
+        // 3. Send messages (Batch/Loop)
+        let successCount = 0;
+        const results = await Promise.allSettled(uniquePsids.map(psid => sendMessage(connection.page_id, connection.page_access_token, psid, message)));
+        successCount = results.filter(r => r.status === "fulfilled").length;
+        // 4. Log the broadcast action
+        await supabaseAdmin.from("messages").insert({
+            user_id: userId,
+            sender_id: userId,
+            sender_email: "System",
+            sender_name: connection.page_name || "Broadcast Bot",
+            body: `[BROADCAST] ${message}`,
+            channel: "facebook",
+            status: "replied",
+            metadata: { type: "broadcast", recipient_count: uniquePsids.length, success_count: successCount }
+        });
+        res.json({
+            success: true,
+            count: successCount,
+            total: uniquePsids.length,
+            message: `Successfully sent broadcast to ${successCount} out of ${uniquePsids.length} customers`
+        });
+    }
+    catch (error) {
+        console.error("❌ Broadcast error:", error);
         res.status(500).json({ error: error.message });
     }
 });
