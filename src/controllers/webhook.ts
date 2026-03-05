@@ -333,13 +333,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             address: cleanData.address,
                             item_photos: cleanData.item_photos || [],
                             notes: cleanData.notes,
-                            status: "pending",
-                            status_history: [{
-                                status: "pending",
-                                message: "Shipment booking received",
-                                location: cleanData.country ? `From ${cleanData.country}` : "Initial Point",
-                                timestamp: new Date().toISOString()
-                            }]
+                            status: "pending"
                         };
                         const { error: shipInsertErr } = await supabaseAdmin.from("shipments").insert(shipmentData);
                         if (shipInsertErr) logger.error("❌ Failed to insert shipment", shipInsertErr);
@@ -371,7 +365,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
                             notes: cleanData.notes,
                             total_amount: totalAmount,
                             item_photos: cleanData.item_photos || [],
-                            item_id: cleanData.item_id, // 🔥 Link order to product
                             status: "pending",
                         };
 
