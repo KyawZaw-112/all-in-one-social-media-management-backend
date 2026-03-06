@@ -194,16 +194,27 @@ router.get("/merchants", async (req, res) => {
 
         if (mError) throw mError;
 
-        // 2. Fetch Users from Auth to get emails
-        const { data: { users }, error: uError } = await supabaseAdmin.auth.admin.listUsers();
-        console.log("📊 [Admin] Auth users count:", users?.length, "error:", uError?.message);
-        if (uError) throw uError;
+        // 2. Fetch ALL Users from Auth (handle pagination)
+        let allUsers: any[] = [];
+        let page = 1;
+        const perPage = 1000;
+        while (true) {
+            const { data: { users }, error: uError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+            if (uError) {
+                console.error("📊 [Admin] Auth listUsers error:", uError.message);
+                break;
+            }
+            allUsers = allUsers.concat(users);
+            if (users.length < perPage) break;
+            page++;
+        }
+        console.log("📊 [Admin] Total auth users fetched:", allUsers.length);
 
         // 3. Map emails to merchants
         const enrichedMerchants = (merchants || []).map(m => ({
             ...m,
             user: {
-                email: users.find(u => u.id === m.id)?.email || "Unknown"
+                email: allUsers.find(u => u.id === m.id)?.email || "Unknown"
             }
         }));
 
