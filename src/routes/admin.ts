@@ -41,6 +41,14 @@ router.use(requireAdmin);
  * Advanced System Statistics
  * GET /api/admin/system-stats
  */
+router.get("/debug-env", async (req, res) => {
+    res.json({
+        url: process.env.SUPABASE_URL,
+        keyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 10),
+        nodeEnv: process.env.NODE_ENV
+    });
+});
+
 router.get("/system-stats", async (req, res) => {
     try {
         // 1. Total Merchants & Group by Plan
