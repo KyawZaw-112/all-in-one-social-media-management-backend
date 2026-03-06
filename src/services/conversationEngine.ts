@@ -742,6 +742,16 @@ export async function runConversationEngine(
         .map((step: any) => {
             const override = metadata.steps?.[step.field];
 
+            // 🧠 Re-hydrate standard logic for known fields
+            // This ensures logic like "Live Link Post" button support works even for DB steps
+            const hardcodedStep = flowDef.steps.find((s: any) => s.field === step.field);
+            if (hardcodedStep) {
+                // Borrow validation, transform, and skipIf if the DB step doesn't have them
+                if (hardcodedStep.validation && !step.validation) step.validation = hardcodedStep.validation;
+                if (hardcodedStep.transform && !step.transform) step.transform = hardcodedStep.transform;
+                if (hardcodedStep.skipIf && !step.skipIf) step.skipIf = hardcodedStep.skipIf;
+            }
+
             // Online Shop Product Logic
             if (step.field === 'item_name') {
                 return {
