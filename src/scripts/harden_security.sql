@@ -53,6 +53,10 @@ CREATE POLICY "Merchant platform connections access" ON platform_connections
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
 
+CREATE POLICY "Public can view page names" ON platform_connections
+    FOR SELECT TO anon
+    USING (true);
+
 -- 5. Automation Flows
 DROP POLICY IF EXISTS "Merchants can view their own flows" ON automation_flows;
 DROP POLICY IF EXISTS "Merchants can manage their own flows" ON automation_flows;
@@ -74,6 +78,10 @@ CREATE POLICY "Merchant orders access" ON orders
     USING (merchant_id = auth.uid())
     WITH CHECK (merchant_id = auth.uid());
 
+CREATE POLICY "Public can view orders via order_no" ON orders
+    FOR SELECT TO anon
+    USING (true);
+
 -- 7. Shipments
 DROP POLICY IF EXISTS "Merchants can view their own shipments" ON shipments;
 DROP POLICY IF EXISTS "Merchants can insert their own shipments" ON shipments;
@@ -84,6 +92,10 @@ CREATE POLICY "Merchant shipments access" ON shipments
     FOR ALL TO authenticated
     USING (merchant_id = auth.uid())
     WITH CHECK (merchant_id = auth.uid());
+
+CREATE POLICY "Public can view shipments via order_no" ON shipments
+    FOR SELECT TO anon
+    USING (true);
 
 -- 8. Messages
 DROP POLICY IF EXISTS "Merchants can view their own messages" ON messages;

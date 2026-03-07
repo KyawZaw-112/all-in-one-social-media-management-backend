@@ -618,6 +618,7 @@ export async function runConversationEngine(
     isResuming: boolean = true
 ) {
     const tempData = conversation.temp_data || {};
+    const metadata = flow.metadata || {};
 
     // 🧠 Check if this flow has an AI Prompt (Gemini Support)
     if (flow.ai_prompt) {
@@ -704,12 +705,14 @@ export async function runConversationEngine(
     }
 
     // 🌐 Language Detection
-    // If we have a saved language in temp_data, use it. Otherwise detect from current message.
-    if (!tempData._lang) {
+    // If flow metadata has a fixed language, use it.
+    // Otherwise, check if we have a saved language in temp_data or detect from current message.
+    if (metadata.language) {
+        tempData._lang = metadata.language;
+    } else if (!tempData._lang) {
         tempData._lang = detectLanguage(messageText);
     } else {
-        // Optional: Re-detect if it's a new trigger? 
-        // For now, let's stick to the detected one or override if new message has clear indicators
+        // Optional: Re-detect if it's a new trigger or message seems to be in a different language
         const newDetected = detectLanguage(messageText);
         if (newDetected !== "en") { // Only override if it's clearly MM or TH
             tempData._lang = newDetected;
@@ -717,8 +720,7 @@ export async function runConversationEngine(
     }
     const currentLang = tempData._lang;
 
-    // Get metadata and merge steps
-    const metadata = flow.metadata || {};
+    // Get business types
     const businessType = flow.business_type || 'default';
     const flowDef = CONVERSATION_FLOWS[businessType] || DEFAULT_FLOW;
 

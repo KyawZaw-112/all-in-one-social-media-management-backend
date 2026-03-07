@@ -26,7 +26,7 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
                 name: "📦 Cargo Booking Flow",
                 business_type: "cargo",
                 trigger_keyword: "cargo, order, booking",
-                description: "Cargo ပစ္စည်း ပို့ဆောင်မှုများကို အလိုအလျောက် ကိုင်တွယ်ပေးမည့် ဖလိုး",
+                description: "Cargo ပစ္စည်း ပို့ဆောင်မှုများကို အလိုအလျောက် ကိုင်တွယ်ပေးမည့် flow",
                 is_active: true,
                 steps: [], // Use code-based premium defaults
                 metadata: {
@@ -42,7 +42,7 @@ export async function seedDefaultFlows(merchantId: string, businessType: string)
                     name: "🛍️ Product Order Flow",
                     business_type: "online_shop",
                     trigger_keyword: "order, buy, price, ဈေးနှုန်း",
-                    description: "Product မှာယူမှုများကို အလိုအလျောက် ကိုင်တွယ်ပေးမည့် ဖလိုး",
+                    description: "Product မှာယူမှုများကို အလိုအလျောက် ကိုင်တွယ်ပေးမည့် flow",
                     is_active: true,
                     steps: [], // Use code-based premium defaults
                     metadata: {
