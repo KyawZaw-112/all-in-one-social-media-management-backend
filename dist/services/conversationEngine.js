@@ -1,5 +1,4 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { generateGeminiResponse } from "./gemini.service.js";
 // ─── Language Detection Helpers ───────────────────────────────────
 export function detectLanguage(text) {
     if (!text)
@@ -603,93 +602,25 @@ function getActiveSteps(steps, tempData) {
 // ─── Main Engine ─────────────────────────────────────────────────
 export async function runConversationEngine(conversation, messageText, flow, attachments = [], isResuming = true) {
     const tempData = conversation.temp_data || {};
-    // 🧠 Check if this flow has an AI Prompt (Gemini Support)
-    if (flow.ai_prompt) {
-        console.log(`🤖 [AI] Using Gemini for flow: ${flow.name}`);
-        // Fetch last 10 messages for context
-        const { data: messages } = await supabaseAdmin
-            .from("messages")
-            .select("sender_name, body")
-            .eq("metadata->>conversation_id", conversation.id)
-            .order("created_at", { ascending: false })
-            .limit(10);
-        // Format history for Gemini
-        const history = (messages || []).reverse().map(m => ({
-            role: m.sender_name === "Auto-Reply Bot" ? "model" : "user",
-            parts: [{ text: m.body }]
-        }));
-        // Add current message to history if it's not already there (isResuming check)
-        if (isResuming && messageText) {
-            // Check if last message was already this one to avoid duplication
-            const lastMsg = history[history.length - 1];
-            if (!lastMsg || lastMsg.parts[0].text !== messageText) {
-                // history.push({ role: "user", parts: [{ text: messageText }] });
-            }
-        }
-        try {
-            const result = await generateGeminiResponse(flow.ai_prompt, history);
-            // Merge extracted data into tempData
-            const updatedData = { ...tempData, ...result.data };
-            // Save reply
-            await saveReplyMessage(conversation, flow, result.reply);
-            // Update conversation
-            await supabaseAdmin
-                .from("conversations")
-                .update({ temp_data: updatedData })
-                .eq("id", conversation.id);
-            // 🔍 Post-AI Product Lookup: Map item_name to item_id if missing
-            if (result.data?.item_name && !updatedData.item_id) {
-                const merchantId = flow.merchant_id || conversation.merchant_id;
-                const { data: products } = await supabaseAdmin
-                    .from("products")
-                    .select("*")
-                    .eq("merchant_id", merchantId)
-                    .eq("is_active", true);
-                if (products) {
-                    const lowerV = result.data.item_name.toLowerCase().trim();
-                    const match = products.find(p => p.name.toLowerCase().includes(lowerV) ||
-                        lowerV.includes(p.name.toLowerCase()));
-                    if (match) {
-                        updatedData.item_id = match.id;
-                        updatedData.product_name = match.name;
-                        updatedData.item_price = match.price;
-                        updatedData.currency = match.currency;
-                        updatedData.item_image = match.image_url;
-                        updatedData._stock = match.stock;
-                        console.log(`🤖 [AI-Match] Linked ${result.data.item_name} to product: ${match.name} (${match.id})`);
-                    }
-                }
-            }
-            return {
-                reply: result.reply,
-                interactive_message: null,
-                temp_data: updatedData,
-                order_complete: result.order_complete || false,
-                business_type: flow.business_type || 'online_shop',
-                shipment_complete: result.shipment_complete || false
-            };
-        }
-        catch (aiError) {
-            console.error("⚠️ AI Failed, falling back to rule-based:", aiError);
-            // Fall through to rule-based engine
-        }
-    }
+    const metadata = flow.metadata || {};
     // 🌐 Language Detection
-    // If we have a saved language in temp_data, use it. Otherwise detect from current message.
-    if (!tempData._lang) {
+    // If flow metadata has a fixed language, use it.
+    // Otherwise, check if we have a saved language in temp_data or detect from current message.
+    if (metadata.language) {
+        tempData._lang = metadata.language;
+    }
+    else if (!tempData._lang) {
         tempData._lang = detectLanguage(messageText);
     }
     else {
-        // Optional: Re-detect if it's a new trigger? 
-        // For now, let's stick to the detected one or override if new message has clear indicators
+        // Optional: Re-detect if it's a new trigger or message seems to be in a different language
         const newDetected = detectLanguage(messageText);
         if (newDetected !== "en") { // Only override if it's clearly MM or TH
             tempData._lang = newDetected;
         }
     }
     const currentLang = tempData._lang;
-    // Get metadata and merge steps
-    const metadata = flow.metadata || {};
+    // Get business types
     const businessType = flow.business_type || 'default';
     const flowDef = CONVERSATION_FLOWS[businessType] || DEFAULT_FLOW;
     // 1️⃣ Fetch data if applicable
@@ -709,14 +640,85 @@ export async function runConversationEngine(conversation, messageText, flow, att
     const mergedSteps = baseSteps
         .map((step) => {
         const override = metadata.steps?.[step.field];
+        // 🧠 Re-hydrate standard logic for known fields
+        // This ensures logic like "Live Link Post" button support works even for DB steps
+        const hardcodedStep = flowDef.steps.find((s) => s.field === step.field);
+        if (hardcodedStep) {
+            // Borrow validation, transform, and skipIf if the DB step doesn't have them
+            if (hardcodedStep.validation && !step.validation)
+                step.validation = hardcodedStep.validation;
+            if (hardcodedStep.transform && !step.transform)
+                step.transform = hardcodedStep.transform;
+            if (hardcodedStep.skipIf && !step.skipIf)
+                step.skipIf = hardcodedStep.skipIf;
+        }
         // Online Shop Product Logic
         if (step.field === 'item_name') {
+            // 🛍️ If merchant has products, show numbered menu
+            if (products.length > 0) {
+                const emojiNums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+                const menuLines = products.map((p, i) => {
+                    const num = emojiNums[i] || `${i + 1}.`;
+                    const desc = p.description ? `\n   📝 ${p.description}` : '';
+                    const price = p.price ? `\n   💰 ${Number(p.price).toLocaleString()} ${p.currency || 'MMK'}` : '';
+                    const stock = p.stock != null ? `  📦 ${p.stock} ခု` : '';
+                    return `${num} ${p.name}${desc}${price}${stock}`;
+                });
+                const menuText = menuLines.join('\n\n');
+                const menuQuestion = {
+                    my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(နံပါတ် သို့ ပစ္စည်းအမည် ရိုက်ပါ)`,
+                    en: `Please select an item 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(Type the number or item name)`,
+                    th: `กรุณาเลือกสินค้า 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(พิมพ์หมายเลข หรือชื่อสินค้า)`
+                };
+                const menuOptions = products.map((p, i) => ({
+                    label: p.name.substring(0, 20),
+                    value: `${i + 1}`
+                }));
+                return {
+                    ...step,
+                    question: menuQuestion,
+                    options: menuOptions,
+                    validation: (v) => {
+                        const n = parseInt(v);
+                        if (n >= 1 && n <= products.length)
+                            return true;
+                        // Also allow typing product name
+                        const lowerV = v.toLowerCase().trim();
+                        return products.some((p) => p.name.toLowerCase().includes(lowerV) ||
+                            lowerV.includes(p.name.toLowerCase()));
+                    },
+                    transform: (v) => {
+                        let match = null;
+                        const n = parseInt(v);
+                        if (n >= 1 && n <= products.length) {
+                            match = products[n - 1];
+                        }
+                        else {
+                            const lowerV = v.toLowerCase().trim();
+                            match = products.find((p) => p.name.toLowerCase().includes(lowerV) ||
+                                lowerV.includes(p.name.toLowerCase()));
+                        }
+                        if (match) {
+                            tempData.item_id = match.id;
+                            tempData.product_name = match.name;
+                            tempData.item_price = match.price;
+                            tempData.currency = match.currency;
+                            tempData.item_image = match.image_url;
+                            tempData.item_desc = match.description;
+                            tempData.item_variants = match.variants;
+                            tempData._stock = match.stock;
+                            return match.name;
+                        }
+                        return v;
+                    }
+                };
+            }
+            // No products — free text entry with matching
             return {
                 ...step,
                 transform: (v) => {
                     const lowerV = v.toLowerCase().trim();
-                    // Try to find a match
-                    const match = products.find(p => p.name.toLowerCase().includes(lowerV) ||
+                    const match = products.find((p) => p.name.toLowerCase().includes(lowerV) ||
                         lowerV.includes(p.name.toLowerCase()));
                     if (match) {
                         tempData.item_id = match.id;
@@ -729,7 +731,6 @@ export async function runConversationEngine(conversation, messageText, flow, att
                         tempData._stock = match.stock;
                     }
                     else {
-                        // Clear previous if any
                         delete tempData.item_id;
                         delete tempData.product_name;
                         delete tempData.item_price;
@@ -997,11 +998,70 @@ export async function runConversationEngine(conversation, messageText, flow, att
         const override = metadata.steps?.[step.field];
         // Online Shop Product Logic
         if (step.field === 'item_name') {
+            // 🛍️ If merchant has products, show numbered menu
+            if (products.length > 0) {
+                const emojiNums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+                const menuLines = products.map((p, i) => {
+                    const num = emojiNums[i] || `${i + 1}.`;
+                    const desc = p.description ? `\n   📝 ${p.description}` : '';
+                    const price = p.price ? `\n   💰 ${Number(p.price).toLocaleString()} ${p.currency || 'MMK'}` : '';
+                    const stock = p.stock != null ? `  📦 ${p.stock} ခု` : '';
+                    return `${num} ${p.name}${desc}${price}${stock}`;
+                });
+                const menuText = menuLines.join('\n\n');
+                const menuQuestion = {
+                    my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(နံပါတ် သို့ ပစ္စည်းအမည် ရိုက်ပါ)`,
+                    en: `Please select an item 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(Type the number or item name)`,
+                    th: `กรุณาเลือกสินค้า 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(พิมพ์หมายเลข หรือชื่อสินค้า)`
+                };
+                const menuOptions = products.map((p, i) => ({
+                    label: p.name.substring(0, 20),
+                    value: `${i + 1}`
+                }));
+                return {
+                    ...step,
+                    question: menuQuestion,
+                    options: menuOptions,
+                    validation: (v) => {
+                        const n = parseInt(v);
+                        if (n >= 1 && n <= products.length)
+                            return true;
+                        const lowerV = v.toLowerCase().trim();
+                        return products.some((p) => p.name.toLowerCase().includes(lowerV) ||
+                            lowerV.includes(p.name.toLowerCase()));
+                    },
+                    transform: (v) => {
+                        let match = null;
+                        const n = parseInt(v);
+                        if (n >= 1 && n <= products.length) {
+                            match = products[n - 1];
+                        }
+                        else {
+                            const lowerV = v.toLowerCase().trim();
+                            match = products.find((p) => p.name.toLowerCase().includes(lowerV) ||
+                                lowerV.includes(p.name.toLowerCase()));
+                        }
+                        if (match) {
+                            tempData.item_id = match.id;
+                            tempData.product_name = match.name;
+                            tempData.item_price = match.price;
+                            tempData.currency = match.currency;
+                            tempData.item_image = match.image_url;
+                            tempData.item_desc = match.description;
+                            tempData.item_variants = match.variants;
+                            tempData._stock = match.stock;
+                            return match.name;
+                        }
+                        return v;
+                    }
+                };
+            }
+            // No products — free text entry with matching
             return {
                 ...step,
                 transform: (v) => {
                     const lowerV = v.toLowerCase().trim();
-                    const match = products.find(p => p.name.toLowerCase().includes(lowerV) ||
+                    const match = products.find((p) => p.name.toLowerCase().includes(lowerV) ||
                         lowerV.includes(p.name.toLowerCase()));
                     if (match) {
                         tempData.item_id = match.id;

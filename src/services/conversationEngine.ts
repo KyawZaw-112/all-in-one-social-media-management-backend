@@ -674,21 +674,24 @@ export async function runConversationEngine(
             if (step.field === 'item_name') {
                 // 🛍️ If merchant has products, show numbered menu
                 if (products.length > 0) {
+                    const emojiNums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
                     const menuLines = products.map((p: any, i: number) => {
-                        const num = String(i + 1).padStart(3, '0');
-                        const price = p.price ? ` - ${p.price} ${p.currency || 'MMK'}` : '';
-                        const stock = p.stock != null ? ` (${p.stock})` : '';
-                        return `${num}. ${p.name}${price}${stock}`;
+                        const num = emojiNums[i] || `${i + 1}.`;
+                        const desc = p.description ? `\n   📝 ${p.description}` : '';
+                        const price = p.price ? `\n   💰 ${Number(p.price).toLocaleString()} ${p.currency || 'MMK'}` : '';
+                        const stock = p.stock != null ? `  📦 ${p.stock} ခု` : '';
+                        return `${num} ${p.name}${desc}${price}${stock}`;
                     });
+                    const menuText = menuLines.join('\n\n');
                     const menuQuestion = {
-                        my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n\n${menuLines.join('\n')}`,
-                        en: `Please select an item 🛍️\n\n${menuLines.join('\n')}`,
-                        th: `กรุณาเลือกสินค้า 🛍️\n\n${menuLines.join('\n')}`
+                        my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(နံပါတ် သို့ ပစ္စည်းအမည် ရိုက်ပါ)`,
+                        en: `Please select an item 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(Type the number or item name)`,
+                        th: `กรุณาเลือกสินค้า 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(พิมพ์หมายเลข หรือชื่อสินค้า)`
                     };
-                    const menuOptions = products.map((p: any, i: number) => {
-                        const num = String(i + 1).padStart(3, '0');
-                        return { label: `${num}`, value: `${i + 1}` };
-                    });
+                    const menuOptions = products.map((p: any, i: number) => ({
+                        label: p.name.substring(0, 20),
+                        value: `${i + 1}`
+                    }));
 
                     return {
                         ...step,
@@ -1044,21 +1047,24 @@ export async function runConversationEngine(
             if (step.field === 'item_name') {
                 // 🛍️ If merchant has products, show numbered menu
                 if (products.length > 0) {
+                    const emojiNums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
                     const menuLines = products.map((p: any, i: number) => {
-                        const num = String(i + 1).padStart(3, '0');
-                        const price = p.price ? ` - ${p.price} ${p.currency || 'MMK'}` : '';
-                        const stock = p.stock != null ? ` (${p.stock})` : '';
-                        return `${num}. ${p.name}${price}${stock}`;
+                        const num = emojiNums[i] || `${i + 1}.`;
+                        const desc = p.description ? `\n   📝 ${p.description}` : '';
+                        const price = p.price ? `\n   💰 ${Number(p.price).toLocaleString()} ${p.currency || 'MMK'}` : '';
+                        const stock = p.stock != null ? `  📦 ${p.stock} ခု` : '';
+                        return `${num} ${p.name}${desc}${price}${stock}`;
                     });
+                    const menuText = menuLines.join('\n\n');
                     const menuQuestion = {
-                        my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n\n${menuLines.join('\n')}`,
-                        en: `Please select an item 🛍️\n\n${menuLines.join('\n')}`,
-                        th: `กรุณาเลือกสินค้า 🛍️\n\n${menuLines.join('\n')}`
+                        my: `ဝယ်ချင်သည့် ပစ္စည်း ရွေးပေးပါ 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(နံပါတ် သို့ ပစ္စည်းအမည် ရိုက်ပါ)`,
+                        en: `Please select an item 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(Type the number or item name)`,
+                        th: `กรุณาเลือกสินค้า 🛍️\n━━━━━━━━━━━━━\n\n${menuText}\n\n━━━━━━━━━━━━━\n(พิมพ์หมายเลข หรือชื่อสินค้า)`
                     };
-                    const menuOptions = products.map((p: any, i: number) => {
-                        const num = String(i + 1).padStart(3, '0');
-                        return { label: `${num}`, value: `${i + 1}` };
-                    });
+                    const menuOptions = products.map((p: any, i: number) => ({
+                        label: p.name.substring(0, 20),
+                        value: `${i + 1}`
+                    }));
 
                     return {
                         ...step,

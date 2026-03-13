@@ -49,8 +49,9 @@ router.post("/approve/:id", requireAdmin, async (req, res) => {
         if (payment.status === "approved") {
             return res.status(400).json({ error: "Already approved" });
         }
+        const monthCount = payment.metadata?.monthCount || 1;
         const startDate = new Date();
-        const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const endDate = new Date(startDate.getTime() + monthCount * 30 * 24 * 60 * 60 * 1000);
         // 2️⃣ Update payment
         const { error: updateError } = await supabaseAdmin
             .from("payments")
