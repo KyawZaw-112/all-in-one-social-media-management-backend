@@ -412,48 +412,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
                     }
                     await supabaseAdmin.from("conversations").update({ status: "completed" }).eq("id", conversation.id);
 
-                    // 🚀 AI Upselling: Suggest other products
-                    if (businessType !== 'cargo') {
-                        try {
-                            const { data: otherProducts } = await supabaseAdmin
-                                .from("products")
-                                .select("*")
-                                .eq("merchant_id", merchantId)
-                                .eq("is_active", true)
-                                .neq("id", cleanData.item_id)
-                                .limit(3);
 
-                            if (otherProducts && otherProducts.length > 0) {
-                                const productsList = otherProducts.map(p => `- ${p.name} (${p.price} ${p.currency})`).join('\n');
-                                const upsellPrompt = `You are a helpful sales assistant for ${connection.page_name}. 
-A customer just bought: ${cleanData.product_name || cleanData.item_name}.
-Here are some other products we have:
-${productsList}
-
-Write a very short, polite recommendation in Burmese (Unicode) suggesting 1-2 of these items. 
-Make it sound natural and encouraging. No yapping.`;
-
-                                const geminiService = (await import('../services/gemini.service.js')).default;
-                                const upsellMsg = await geminiService.generateResponse(upsellPrompt);
-
-                                if (upsellMsg) {
-                                    await sendMessage(pageId, connection.page_access_token, senderId, upsellMsg);
-                                    await safeLogMessage({
-                                        user_id: merchantId,
-                                        sender_id: merchantId,
-                                        sender_email: "AI-Assistant",
-                                        sender_name: "Auto-Reply Bot",
-                                        body: upsellMsg,
-                                        channel: "facebook",
-                                        status: "replied",
-                                        metadata: { conversation_id: conversation.id, type: "upsell" }
-                                    });
-                                }
-                            }
-                        } catch (upsellErr) {
-                            console.warn("⚠️ AI Upselling failed", upsellErr);
-                        }
-                    }
 
                     // 📄 Auto PDF Invoicing (Link Generation PoC)
                     try {
